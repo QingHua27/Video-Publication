@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from utils.early_video_cover import prepare_video_and_cover, cover_entry_available
+from utils.publish_windows import launch_browser
 
 import asyncio
 import os
@@ -63,7 +65,7 @@ async def _dismiss_overlays(page: Page) -> None:
 
 async def cookie_auth(account_file) -> bool:
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(**_build_launch_kwargs(headless=LOCAL_CHROME_HEADLESS))
+        browser = await launch_browser(playwright.chromium, **_build_launch_kwargs(headless=LOCAL_CHROME_HEADLESS))
         try:
             context = await browser.new_context(storage_state=account_file)
             context = await set_init_script(context)
@@ -93,7 +95,7 @@ async def cookie_auth(account_file) -> bool:
 async def toutiao_cookie_gen(account_file):
     """CLI/本地调试用：打开登录页，手动登录后保存 cookie。"""
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(**_build_launch_kwargs(headless=False))
+        browser = await launch_browser(playwright.chromium, **_build_launch_kwargs(headless=False))
         context = await browser.new_context()
         context = await set_init_script(context)
         page = await context.new_page()
@@ -142,19 +144,22 @@ class TouTiaoVideo(object):
             self.description = ""
 
     async def wait_for_upload(self, page: Page, timeout_ms: int = 10 * 60 * 1000) -> None:
+        stable = 0
         start = asyncio.get_event_loop().time()
         while (asyncio.get_event_loop().time() - start) * 1000 < timeout_ms:
             status = await page.evaluate(
                 """() => {
                     const body = document.body ? document.body.innerText : '';
                     if (body.includes('上传失败')) return 'failed';
+                    if (/上传中|正在上传|转码中|处理中/.test(body) || Array.from(body.matchAll(/(\\d+(?:\\.\\d+)?)%/g)).some(m=>Number(m[1])<100)) return 'uploading';
                     if (body.includes('上传成功')) return 'done';
                     const titleInput = document.querySelector('input[placeholder*="字符"]');
                     if (titleInput) return 'done';
                     return 'uploading';
                 }"""
             )
-            if status == "done":
+            stable = stable + 1 if status == "done" else 0
+            if stable >= 3:
                 toutiao_logger.success("视频上传完毕")
                 return
             if status == "failed":
@@ -241,6 +246,10 @@ class TouTiaoVideo(object):
                 toutiao_logger.warning(f"简介填写失败（可忽略）: {exc}")
 
     async def handle_cover(self, page: Page) -> None:
+        if getattr(self, 'thumbnail_path', None):
+            from utils.video_covers import apply_custom_video_cover
+            await apply_custom_video_cover(page, self.thumbnail_path)
+            return
         """封面必填：打开上传封面对话框，走「封面截取」默认第一帧。"""
         try:
             cover_trigger = page.locator("text=上传封面").first
@@ -281,14 +290,12 @@ class TouTiaoVideo(object):
                     break
                 await page.wait_for_timeout(1000)
 
-            await page.keyboard.press("Escape")
+            if await page.locator("text=封面编辑").first.is_visible():
+                raise RuntimeError('封面编辑窗口尚未关闭')
+            await page.wait_for_function("()=>Array.from(document.querySelectorAll('[class*=cover] img')).some(img=>img.complete && img.naturalWidth>0)",timeout=30000)
             toutiao_logger.info("封面设置完成")
         except Exception as exc:
-            toutiao_logger.warning(f"封面设置失败（可忽略，页面可能已自动生成）: {exc}")
-            try:
-                await page.keyboard.press("Escape")
-            except Exception:
-                pass
+            raise RuntimeError('今日头条封面设置未完成，已停止发布') from exc
 
     async def set_schedule_time(self, page: Page, publish_date: datetime) -> None:
         """尽力支持定时；UI 变动时仅记录警告，不阻断。"""
@@ -328,7 +335,7 @@ class TouTiaoVideo(object):
 
     async def upload(self, playwright: Playwright) -> None:
         launch_kwargs = _build_launch_kwargs(self.headless)
-        browser = await playwright.chromium.launch(**launch_kwargs)
+        browser = await launch_browser(playwright.chromium, **launch_kwargs)
         context = await browser.new_context(
             storage_state=f"{self.account_file}",
             user_agent=(
@@ -354,7 +361,10 @@ class TouTiaoVideo(object):
         file_input = page.locator('input[type="file"]').first
         await file_input.set_input_files(str(self.file_path))
         await page.wait_for_timeout(2000)
-        await self.wait_for_upload(page)
+        await prepare_video_and_cover(
+            lambda:self.wait_for_upload(page),
+            lambda:cover_entry_available(page,labels=('上传封面','选择封面','更换封面') if getattr(self,'thumbnail_path',None) else ()),
+            lambda:self.handle_cover(page),required=True)
         await page.wait_for_timeout(2000)
         await _dismiss_overlays(page)
 
@@ -365,7 +375,6 @@ class TouTiaoVideo(object):
             pass
 
         await self.fill_title_and_desc(page)
-        await self.handle_cover(page)
         await _dismiss_overlays(page)
 
         if self.dry_run:
@@ -2084,7 +2093,7 @@ class TouTiaoArticle(object):
             raise ValueError("文章标题不能为空")
 
         launch_kwargs = _build_launch_kwargs(self.headless)
-        browser = await playwright.chromium.launch(**launch_kwargs)
+        browser = await launch_browser(playwright.chromium, **launch_kwargs)
         context = await browser.new_context(
             storage_state=f"{self.account_file}",
             user_agent=(

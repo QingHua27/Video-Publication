@@ -178,7 +178,6 @@ cookies
 .vite/
 dist/
 node_modules/
-package-lock.json
 
 # database
 db/database.db
@@ -201,3 +200,30 @@ qrcode.png
 dist/
 scripts_dev/
 db/database.db.empty-backup-*
+
+# Private account state and workstation data (case-sensitive Git paths)
+/Cookie/
+/cookies/
+/cookiesFile/
+/.ssh/
+/.browsers/
+/.cache/
+/.tmp/
+/work/
+/videos/
+/db/*.db*
+/db/backups/
+*.har
+
+# Local browser probes contain workstation-specific fixtures, not release tests
+/tests/probe_*.py
+/tests/verify_*.py
+/_verify*.py
+/findings.md
+/progress.md
+/task_plan.md
+
+# Local service logs, captures and generated build output
+/logs/
+/sau_frontend/dist/
+/sau_frontend/.vite/

@@ -1,9 +1,9 @@
 <template>
-  <div class="about">
+  <div class="about"><div class="page-header"><div class="page-kicker">WORKSPACE / ABOUT</div><h1>关于系统</h1><p class="page-description">了解工具、支持能力与技术信息。</p></div>
     <el-card class="about-card">
       <div class="about-header">
-        <h1>自媒体自动化运营系统</h1>
-        <p class="version">social-auto-upload</p>
+        <h1>创作工作台</h1>
+        <p class="version">Video Publication · 修改自 <a href="https://github.com/rehatRobot/omnipost" target="_blank" rel="noopener noreferrer">OmniPost</a></p>
       </div>
 
       <el-divider />

@@ -40,6 +40,7 @@ request.interceptors.response.use(
   },
   (error) => {
     console.error('响应错误:', error)
+    if (error.config?.silentError) return Promise.reject(error)
     
     // 处理HTTP错误状态码
     if (error.response) {
@@ -59,6 +60,9 @@ request.interceptors.response.use(
         case 404:
           ElMessage.error(backendMsg || '请求地址不存在')
           break
+        case 413:
+          ElMessage.error(backendMsg || '文件被服务端大小限制拦截，请检查服务配置')
+          break
         case 500:
           ElMessage.error(backendMsg || '服务器内部错误')
           break
@@ -75,8 +79,8 @@ request.interceptors.response.use(
 
 // 封装常用的请求方法
 export const http = {
-  get(url, params) {
-    return request.get(url, { params })
+  get(url, params, config = {}) {
+    return request.get(url, { ...config, params })
   },
   
   post(url, data, config = {}) {

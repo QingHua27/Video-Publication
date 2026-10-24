@@ -10,6 +10,28 @@ from uploader.bilibili_uploader.runtime import (
 
 
 class BiliupRuntimeTests(unittest.TestCase):
+    @patch('uploader.bilibili_uploader.runtime.subprocess.run')
+    @patch('uploader.bilibili_uploader.runtime.ensure_biliup_binary')
+    def test_upload_bypasses_only_video_cdn_proxy_and_removes_ansi(self, binary, run):
+        binary.return_value=Path('biliup.exe')
+        run.return_value=Mock(returncode=1,stdout='',stderr='\x1b[31mcertificate expired\x1b[0m')
+        with patch.dict('os.environ',{'HTTPS_PROXY':'http://127.0.0.1:7890','NO_PROXY':'localhost'},clear=True):
+            result=run_biliup_command(['upload','video.mp4'])
+        env=run.call_args.kwargs['env']
+        self.assertNotIn('HTTPS_PROXY',env)
+        self.assertEqual(env['NO_PROXY'],'*')
+        self.assertEqual(result.stderr,'certificate expired')
+        self.assertNotIn('bilibili.com',env['NO_PROXY'])
+
+    @patch('uploader.bilibili_uploader.runtime.subprocess.run')
+    @patch('uploader.bilibili_uploader.runtime.ensure_biliup_binary')
+    def test_login_keeps_existing_proxy_exclusions(self, binary, run):
+        binary.return_value=Path('biliup.exe')
+        run.return_value=Mock(returncode=0,stdout='',stderr='')
+        with patch.dict('os.environ',{'NO_PROXY':'localhost'},clear=True):
+            run_biliup_command(['login'])
+        self.assertEqual(run.call_args.kwargs['env']['NO_PROXY'],'localhost')
+
     def test_build_biliup_runtime_path_returns_platform_path(self):
         path = build_biliup_runtime_path("Windows")
         self.assertTrue(str(path).endswith("biliup.exe"))

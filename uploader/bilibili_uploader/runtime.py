@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import platform
+import os
+import re
 import shutil
 import stat
 import subprocess
@@ -180,11 +182,29 @@ def run_biliup_command(arguments: list[str], interactive: bool = False) -> subpr
     command = [str(binary_path), *arguments]
     if interactive:
         return subprocess.run(command, check=False)
-    return subprocess.run(
+    env = os.environ.copy()
+    env['NO_COLOR'] = '1'
+    env['CLICOLOR'] = '0'
+    if 'upload' in arguments:
+        # The uploader's Rust client did not honor a domain-only exclusion.
+        # Isolate direct networking to this child, including Windows system
+        # proxy discovery; do not alter the parent or disable TLS validation.
+        for key in list(env):
+            if key.lower() in ('http_proxy','https_proxy','all_proxy','no_proxy'):
+                del env[key]
+        env['NO_PROXY'] = '*'
+    result = subprocess.run(
         command,
         check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=env,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
     )
+    for field in ('stdout', 'stderr'):
+        value = getattr(result, field, None)
+        if isinstance(value, str):
+            setattr(result, field, re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', value))
+    return result

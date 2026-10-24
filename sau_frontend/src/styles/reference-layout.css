@@ -1,0 +1,235 @@
+/* Visual contract: supplied 1586 x 992 reference, 207px navigation and 49px topbar. */
+#app.reference-shell{font-family:'Microsoft YaHei','Segoe UI',sans-serif;font-size:14px;color:#171b23}
+#app.reference-shell :is(button,input,textarea,.el-button,.el-select,.el-input,.el-checkbox,.el-radio){font-family:inherit}
+#app.reference-shell .sidebar .logo{height:49px;min-height:49px;padding:0 20px;border-bottom:1px solid #e8ebef;box-sizing:border-box}
+#app.reference-shell .sidebar .logo h2{font-size:16px;font-weight:700;letter-spacing:-.5px;line-height:24px;color:#111827}
+#app.reference-shell .sidebar-menu{padding:4px 0}
+#app.reference-shell .sidebar-menu .el-menu-item{height:49px;line-height:49px;margin:0;padding:0 26px!important;border-radius:0;font-size:16px;color:#303a4b}
+#app.reference-shell .sidebar-menu .el-menu-item .el-icon{font-size:20px;width:20px;height:20px;margin-right:15px;color:#273142!important}
+#app.reference-shell .sidebar-menu .el-menu-item.is-active{background:#f5f6f8!important;font-weight:600}
+#app.reference-shell .sidebar-menu .el-menu-item.is-active:before{left:6px;top:4px;bottom:4px;width:3px;background:#101720}
+#app.reference-shell .sidebar-bottom{padding:12px 20px;border-top:0!important}
+#app.reference-shell .sidebar-bottom .exit-app-button{font-size:15px;color:#344052!important;background:transparent!important;border:0;padding:9px 6px;height:40px;box-shadow:none}
+#app.reference-shell .sidebar-bottom .el-icon{font-size:20px;color:#344052!important;margin-right:12px}
+#app.reference-shell .el-header{height:49px!important;min-height:49px;border-bottom:1px solid #e1e5eb;box-shadow:none;background:#fbfcfe}
+.reference-publish-topbar{height:49px;display:flex;align-items:center;gap:34px;padding:0 22px}
+.reference-workspace-title{font-size:21px;font-weight:700;white-space:nowrap;line-height:28px;letter-spacing:-.5px}
+#publish-header-slot{flex:1;min-width:0;height:100%}
+#app.reference-shell .reference-tabs{height:100%;margin:0!important;padding:0!important;border:0!important;background:none!important}
+#app.reference-shell .reference-tabs .tab-header{height:100%;gap:12px;display:flex;align-items:center;justify-content:space-between}
+#app.reference-shell .reference-tabs .tab-list{height:100%;gap:5px!important;align-items:flex-end;overflow:auto;flex-wrap:nowrap;display:flex;flex:1;min-width:0}
+#app.reference-shell .reference-tabs .tab-item{height:40px!important;padding:0 17px!important;margin-bottom:0!important;border:1px solid #e1e5eb!important;border-bottom:2px solid #121820!important;border-radius:5px 5px 0 0!important;background:#fff!important;color:#171b23!important;font-size:15px!important;gap:10px;flex:0 0 auto!important;width:auto!important;display:flex;align-items:center;font-weight:600;cursor:pointer;box-sizing:border-box}
+#app.reference-shell .reference-tabs .close-icon{font-size:14px;margin-left:4px;color:#303b4e}
+#app.reference-shell .reference-tabs .tab-actions{height:100%;display:flex;align-items:center;gap:10px;flex:none}
+#app.reference-shell .reference-tabs .tab-actions .el-button{height:34px;min-height:34px;padding:0 12px;font-size:14px!important;margin:0;border:1px solid #dfe4eb!important;border-radius:5px;background:#fff!important;color:#202938!important}
+#app.reference-shell .reference-tabs .tab-actions .el-icon{font-size:16px;color:inherit;margin-right:5px}
+#app.reference-shell .reference-tabs .tab-actions .el-dropdown .el-button{border:0!important;padding:0 3px;background:transparent!important;width:22px}
+#app.reference-shell .reference-tabs .tab-actions .el-dropdown .el-icon{margin:0}
+#app.reference-shell.publish-shell .el-main{padding:16px 16px 90px;background:#f8f9fb!important}
+#app.reference-shell .publish-center{max-width:none;margin:0;padding:0!important}
+#app.reference-shell .publish-grid{grid-template-columns:minmax(0,1.438fr) minmax(340px,1fr);gap:16px;align-items:start}
+#app.reference-shell .publish-main-column,#app.reference-shell .publish-settings-column{gap:14px}
+#app.reference-shell .editor-panel,#app.reference-shell .publish-settings-column>.account-section{padding:14px 16px;border:1px solid #e5e9ef;border-radius:8px;box-shadow:0 1px 3px #10203002;min-width:0;box-sizing:border-box}
+#app.reference-shell .panel-caption{font-size:16px;font-weight:650;line-height:22px;gap:12px;letter-spacing:0;color:#171b23;border-bottom:1px solid #edf0f4;padding:0 0 9px;margin:0 0 9px}
+#app.reference-shell .panel-caption>span:first-child{font-size:16px;font-weight:600;color:#171b23}
+#app.reference-shell .panel-caption .reference-caption-note{font-size:12px;color:#9299a6;font-weight:400;margin-left:10px;letter-spacing:0}
+#app.reference-shell .publish-center .publish-grid h3{font-size:14px!important;font-weight:500!important;line-height:21px;margin:0!important}
+#app.reference-shell .publish-center :is(.el-input__wrapper,.el-select__wrapper){min-height:38px;border-radius:5px;font-size:14px}
+#app.reference-shell .publish-center .el-select__selected-item{font-size:14px}
+#app.reference-shell .publish-center .el-button{font-size:14px;border-radius:5px}
+#app.reference-shell .publish-center .el-checkbox__inner{width:17px;height:17px;border-radius:3px}
+#app.reference-shell .publish-center .el-checkbox__inner:after{left:50%;top:50%;width:4px;height:8px}
+#app.reference-shell .publish-center .upload-options{top:8px;right:16px}
+#app.reference-shell .selected-video-preview{width:234px;height:128px;background:#151922;border-radius:5px}
+#app.reference-shell .publish-center .file-item{grid-template-columns:234px minmax(0,1fr) 108px;gap:6px 18px;align-items:center}
+#app.reference-shell .file-item .el-link{font-size:16px;line-height:24px;align-self:end}
+#app.reference-shell .file-item .file-size{font-size:14px!important;line-height:22px;align-self:start}
+#app.reference-shell .video-ready-label{font-size:12px;margin-top:7px;line-height:20px;color:#239d44}
+#app.reference-shell .video-item-actions{gap:8px}
+#app.reference-shell .file-item .video-item-actions .el-button{height:36px;min-width:108px;padding:0 10px;border-color:#dfe4eb;background:#fff;color:#263142}
+#app.reference-shell .file-item .video-item-actions .el-button .el-icon{font-size:16px;margin-right:8px}
+#app.reference-shell .file-item .video-item-actions .el-button--danger{color:#273142;border-color:#dfe4eb}
+#app.reference-shell .basic-panel :is(.title-section,.topic-section){grid-template-columns:66px minmax(0,1fr);gap:16px}
+#app.reference-shell .basic-panel .title-section{margin-bottom:16px!important}
+#app.reference-shell .basic-panel .topic-section{margin:0!important}
+#app.reference-shell .publish-center .title-input .el-textarea__inner{height:40px;min-height:40px!important;padding:9px 62px 9px 12px;line-height:22px;font-size:14px;border-radius:5px;resize:none}
+#app.reference-shell .basic-panel .topic-display{gap:10px!important;flex-wrap:nowrap}
+#app.reference-shell .publish-center .selected-topics{gap:8px;flex-wrap:wrap}
+#app.reference-shell .publish-center .topic-tag{height:36px;border-radius:20px;padding:0 12px;font-size:14px!important;background:#f4f6f8;border-color:#edf0f3;color:#273142;white-space:nowrap}
+#app.reference-shell .publish-center .topic-actions{gap:8px}
+#app.reference-shell .publish-center .topic-actions .el-button:first-child{order:2}
+#app.reference-shell .publish-center .topic-actions .el-button:last-child{order:1}
+#app.reference-shell .publish-center .topic-actions .el-icon{font-size:16px;color:#303b4e;margin-right:6px}
+#app.reference-shell .publish-center .topic-actions .el-button{height:36px;font-size:13px;padding:0 12px;background:#fff!important;border-color:#dfe4eb!important}
+#app.reference-shell .publish-center .video-cover-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0}
+#app.reference-shell .publish-center .video-cover-card{padding:9px 10px;border:1px solid #e8ecf1;border-radius:5px;display:flex;flex-direction:column;min-width:0;background:#fff}
+#app.reference-shell .publish-center .video-cover-card>strong{font-size:14px;line-height:21px;font-weight:600}
+#app.reference-shell .publish-center .video-cover-card>.optional-hint{font-size:12px!important;line-height:20px;min-height:20px;margin:3px 0 6px}
+#app.reference-shell .publish-center .video-cover-upload{margin:0;line-height:0;min-height:0}
+#app.reference-shell .publish-center .video-cover-upload .el-upload{width:100%;height:150px;border-radius:2px;background:#fafafa;aspect-ratio:auto!important}
+#app.reference-shell .publish-center .video-cover-upload img{width:100%;height:100%;object-fit:contain}
+#app.reference-shell .publish-center .cover-file-name{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-top:8px;line-height:20px;font-size:14px}
+#app.reference-shell .cover-file-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+#app.reference-shell .cover-ready-check{height:16px;width:16px;font-size:11px;margin-right:5px;vertical-align:middle}
+#app.reference-shell .cover-file-actions{justify-content:center;gap:16px}
+#app.reference-shell .cover-file-actions .el-button{height:23px;font-size:14px!important;line-height:20px;color:#3478e5!important}
+#app.reference-shell .reference-import-source{font-size:12px;color:#9aa1ac;line-height:20px;margin:7px 0 0!important}
+#app.reference-shell .schedule-panel:not(.is-scheduled){display:block;min-height:0;gap:0}
+#app.reference-shell .schedule-panel:not(.is-scheduled) .panel-caption{display:flex;margin:0 0 8px;padding:0;border:0}
+#app.reference-shell .schedule-panel:not(.is-scheduled) .schedule-section{display:grid;grid-template-columns:66px minmax(0,1fr);gap:16px}
+#app.reference-shell .schedule-panel:not(.is-scheduled) .schedule-section>h3{display:block!important}
+#app.reference-shell .schedule-controls{display:flex;gap:12px;align-items:center;flex-direction:row}
+#app.reference-shell .reference-publish-time{width:190px;max-width:100%}
+#app.reference-shell .reference-ai-toggle{margin:0;height:30px;min-height:30px;flex:none}
+#app.reference-shell .reference-ai-toggle .el-checkbox__label{font-size:14px;color:#273142}
+#app.reference-shell .accounts-panel-heading{margin:0 0 10px;min-height:26px}
+#app.reference-shell .accounts-panel-heading h3{font-size:16px!important;font-weight:650!important}
+#app.reference-shell .accounts-panel-heading .section-count{font-size:12px;color:#818b9b;font-weight:400;margin-left:12px}
+#app.reference-shell .accounts-panel-heading .el-checkbox__label{font-size:13px}
+#app.reference-shell .account-platform-grid{gap:0;margin-top:0}
+#app.reference-shell .publish-center .account-platform-card{grid-template-columns:22px 126px minmax(0,1fr) 22px;gap:12px;padding:9px 0;min-height:49px;border-bottom:1px solid #edf0f4}
+#app.reference-shell .publish-center .account-platform-card>.el-checkbox{width:22px;height:22px;min-height:22px;align-items:center}
+#app.reference-shell .publish-center .account-platform-card .platform-badge{width:32px;height:32px;border-radius:7px}
+#app.reference-shell .platform-badge img{width:24px;height:24px}
+#app.reference-shell .publish-center .platform-card-title strong{font-size:14px;font-weight:600}
+#app.reference-shell .account-display-name{font-size:14px;color:#7d8799}
+#app.reference-shell .account-settings-link{font-size:19px;color:#9ba3af}
+#app.reference-shell .platform-options-panel{display:flex;flex-direction:column;gap:10px;overflow:auto}
+#app.reference-shell .platform-options-panel>div:not(:last-child){margin:0!important}
+#app.reference-shell .publish-center .platform-options-panel>div:not(:last-child){margin:0!important;flex-shrink:0}
+#app.reference-shell .platform-options-panel>.platform-section{order:0;position:relative}
+#app.reference-shell .platform-options-panel .platform-section>h3{font-size:16px!important;font-weight:650!important;margin:0 0 10px!important;line-height:24px}
+#app.reference-shell .platform-options-panel .platform-range{position:absolute;right:0;top:0;z-index:1;background:#fff;font-size:11px;max-width:100%}
+#app.reference-shell .platform-options-panel .platform-range summary{font-size:0;padding:0;cursor:pointer}
+#app.reference-shell .platform-options-panel .platform-range summary:after{content:'•••';font-size:15px;letter-spacing:2px;color:#8b94a3}
+#app.reference-shell .platform-options-panel .platform-range[open]{border:1px solid #e2e6ed;border-radius:5px;padding:8px;box-shadow:0 5px 20px #0001}
+#app.reference-shell .publish-center .platform-settings-tabs{margin:0;border-bottom:1px solid #edf0f4}
+#app.reference-shell .publish-center .platform-settings-tabs .el-radio-button__inner{font-size:14px;padding:10px 5px;border:0!important;border-bottom:2px solid transparent!important;box-shadow:none!important}
+#app.reference-shell .publish-center .platform-settings-tabs .is-active .el-radio-button__inner{border-bottom-color:#171b23!important}
+#app.reference-shell .platform-settings-tabs .el-radio-button{border:0!important;box-shadow:none!important;background:transparent!important;border-radius:0!important;display:flex;justify-content:center}
+#app.reference-shell .platform-settings-tabs .el-radio-button:before,#app.reference-shell .platform-settings-tabs .el-radio-button:after{display:none!important}
+#app.reference-shell .platform-settings-tabs .el-radio-button>span{box-shadow:none!important;outline:0!important;border-left:0!important;border-right:0!important;border-top:0!important;border-radius:0!important;background:transparent!important}
+#app.reference-shell .platform-options-panel>.bilibili-category-section{order:1;display:grid;grid-template-columns:80px minmax(0,1fr);align-items:center;gap:14px}
+#app.reference-shell .platform-options-panel>.bilibili-creation-section{order:2;grid-template-columns:80px minmax(0,1fr);gap:14px}
+#app.reference-shell .platform-options-panel>.bilibili-creation-section>.optional-hint{display:none}
+#app.reference-shell .platform-options-panel>.reference-collection{order:3;display:grid;grid-template-columns:80px minmax(0,1fr);gap:0 14px;align-items:start}
+#app.reference-shell .reference-collection>h3{padding-top:9px;grid-column:1;grid-row:1}
+#app.reference-shell .reference-collection>.collection-account-row{grid-column:2;margin:0!important;gap:0;min-width:0}
+#app.reference-shell .reference-collection:not(.multiple-collection-accounts) .collection-account-name{display:none}
+#app.reference-shell .reference-collection .collection-account-control>.optional-hint{font-size:11px!important;line-height:18px;margin:3px 0 0}
+#app.reference-shell .reference-collection .collection-account-control .el-button{height:38px;padding:0 12px;font-size:13px}
+#app.reference-shell .reference-collection>p{display:none}
+#app.reference-shell .platform-options-panel>.settings-memory-note{order:5;display:flex;gap:9px;align-items:center;border:1px solid #f4d084;background:#fff9e9;color:#996116;border-radius:5px;padding:7px 10px;font-size:11px;line-height:18px}
+#app.reference-shell .settings-memory-note .el-icon{font-size:17px;color:#efa126;flex:none}
+#app.reference-shell .platform-options-panel>.publication-more{order:6;border-top:1px solid #edf0f4;padding-top:8px;font-size:12px;color:#7d8799}
+#app.reference-shell .publication-more>summary{cursor:pointer}
+#app.reference-shell .publication-more .dry-run-section{margin:8px 0}
+#app.reference-shell .platform-options-panel>div:not(.platform-section):not(.reference-collection):not(.bilibili-creation-section):not(.bilibili-category-section):not(.settings-memory-note){order:4}
+#app.reference-shell .compact-task-panel{min-height:150px}
+#app.reference-shell .compact-task-heading{font-size:16px;gap:10px;margin-bottom:12px;line-height:25px}
+#app.reference-shell .compact-task-heading strong{font-weight:650}
+#app.reference-shell .reference-task-counts{font-size:12px;margin-left:auto;color:#7b8697;white-space:nowrap}
+#app.reference-shell .compact-task-heading .el-button{font-size:11px;height:24px}
+#app.reference-shell .compact-task-panel>.el-progress{margin-bottom:10px}
+#app.reference-shell .compact-task-row{font-size:13px;min-height:41px;line-height:20px;gap:8px;padding:5px 0;box-sizing:border-box}
+#app.reference-shell .compact-task-row strong{max-width:41%;font-size:13px}
+#app.reference-shell .compact-task-row>span{max-width:32%;font-size:12px}
+#app.reference-shell .compact-task-row>.reference-mini-progress{flex:0 0 64px}
+#app.reference-shell .compact-task-row small{font-size:10px;color:#8993a4}
+#app.reference-shell .reference-task-empty{display:grid;place-items:center;min-height:70px;color:#9da5b3;font-size:12px}
+#app.reference-shell .publish-center .action-buttons{left:var(--publish-sidebar-width);height:75px;min-height:75px;padding:10px 22px!important;gap:14px!important;border-top:1px solid #dfe4eb!important}
+#app.reference-shell .publish-center .publish-summary{display:grid;gap:3px;margin-right:auto}
+#app.reference-shell .publish-summary strong{font-size:15px!important;font-weight:600!important;color:#323d4f!important}
+#app.reference-shell .publish-summary strong.configuration-ready{color:#262f3c!important}
+#app.reference-shell .publish-summary span{font-size:13px!important;color:#969eab!important}
+#app.reference-shell .publish-summary strong.configuration-ready:first-letter{color:#249b48}
+#app.reference-shell .task-dock-summary{border-right:0;padding:0;gap:10px}
+#app.reference-shell .task-dock-summary.no-tasks{cursor:default}
+#app.reference-shell .task-dock-summary strong{font-size:12px}
+#app.reference-shell .task-dock-summary .el-progress{display:block}
+#app.reference-shell .publish-center .action-buttons>.el-button{height:44px;min-width:88px;font-size:14px;padding:0 20px;margin:0}
+#app.reference-shell .publish-center .action-buttons>.publish-submit{height:44px;min-width:170px;border-radius:5px;background:#11151c;border-color:#11151c;font-size:14px;font-weight:500}
+#app.reference-shell .publish-submit>.el-icon,#app.reference-shell .publish-submit>span>.el-icon{font-size:17px;margin-right:9px}
+@media(min-width:1200px) and (min-height:900px){
+ #app.reference-shell .publish-grid{height:calc(100dvh - 140px)}
+ #app.reference-shell .publish-main-column{height:100%;grid-template-rows:196fr 164fr 359fr 92fr;min-height:0}
+ #app.reference-shell .publish-main-column>.editor-panel{min-height:0;display:flex;flex-direction:column;align-items:stretch;overflow:visible}
+ #app.reference-shell .publish-main-column .video-panel>.upload-section{margin:0!important;min-height:0;flex:1;display:flex;align-items:center}
+ #app.reference-shell .publish-main-column .video-panel .uploaded-files{width:100%;margin:0!important}
+ #app.reference-shell .basic-panel .panel-caption{margin-bottom:14px}
+ #app.reference-shell .covers-panel .video-cover-section{min-height:0;flex:1;display:flex;flex-direction:column}
+ #app.reference-shell .covers-panel .video-cover-grid{flex:1;min-height:0}
+ #app.reference-shell .covers-panel .panel-caption{line-height:20px;padding-bottom:5px;margin-bottom:8px}
+ #app.reference-shell .covers-panel .video-cover-card .video-cover-upload{flex:none!important;min-height:0;height:clamp(96px,calc((100dvh - 140px)*.175),180px)}
+ #app.reference-shell .covers-panel .video-cover-upload .el-upload{height:100%}
+ #app.reference-shell .publish-settings-column{height:calc(100% - 6px);gap:16px;grid-template-rows:308fr minmax(310px,322fr) 184fr;min-height:0}
+ #app.reference-shell .publish-settings-column>.account-section{display:flex;flex-direction:column;min-height:0}
+ #app.reference-shell .publish-settings-column>.account-section .account-platform-grid{flex:1;display:flex;flex-direction:column;overflow:auto}
+ #app.reference-shell .publish-settings-column>.account-section .account-platform-card{flex:1;min-height:38px;padding:5px 0}
+ #app.reference-shell .platform-options-panel{gap:10px;min-height:0}
+ #app.reference-shell .compact-task-panel{min-height:0}
+ #app.reference-shell .publish-main-column:has(.article-body-section),#app.reference-shell .publish-main-column:has(.is-scheduled),#app.reference-shell .publish-main-column:has(.file-item:nth-child(2)){height:auto;grid-template-rows:auto}
+ #app.reference-shell .publish-grid:has(.is-scheduled),#app.reference-shell .publish-grid:has(.article-body-section),#app.reference-shell .publish-grid:has(.file-item:nth-child(2)){height:auto}
+}
+@media(min-width:1200px) and (min-height:900px) and (max-height:960px){#app.reference-shell .publish-main-column{grid-template-rows:196fr 164fr 359fr 96px}}
+@media(min-width:931px) and (max-height:899px){
+ #app.reference-shell .selected-video-preview{width:150px;height:82px}
+ #app.reference-shell .publish-center .file-item{grid-template-columns:150px minmax(0,1fr) 90px;gap:5px 12px}
+ #app.reference-shell .file-item .video-item-actions .el-button{height:27px;min-width:90px;font-size:12px}
+ #app.reference-shell .video-item-actions{gap:5px}
+ #app.reference-shell .panel-caption{font-size:14px;line-height:19px;padding-bottom:6px;margin-bottom:7px}
+ #app.reference-shell .panel-caption>span:first-child{font-size:14px}
+ #app.reference-shell .editor-panel,#app.reference-shell .publish-settings-column>.account-section{padding:9px 12px}
+ #app.reference-shell .publish-main-column,#app.reference-shell .publish-settings-column{gap:7px}
+ #app.reference-shell .publish-center .video-cover-upload .el-upload{height:90px}
+ #app.reference-shell .publish-center .video-cover-card{padding:6px}
+ #app.reference-shell .publish-center .cover-file-name{margin-top:4px;gap:2px;font-size:10px}
+ #app.reference-shell .publish-center .cover-file-actions .el-button{height:20px;font-size:11px!important}
+ #app.reference-shell .publish-center .topic-tag{height:30px;padding:0 8px;font-size:11px!important}
+ #app.reference-shell .publish-center .topic-actions .el-button{height:30px;padding:0 8px;font-size:11px}
+ #app.reference-shell .basic-panel .title-section{margin-bottom:8px!important}
+ #app.reference-shell .publish-center .title-input .el-textarea__inner{height:34px;min-height:34px!important;padding-top:6px;padding-bottom:6px}
+ #app.reference-shell .publish-center .account-platform-card{min-height:32px;padding:3px 0}
+ #app.reference-shell .publish-center .account-platform-card .platform-badge{height:25px;width:25px}
+ #app.reference-shell .publish-center .platform-card-title strong,#app.reference-shell .account-display-name{font-size:12px}
+ #app.reference-shell .platform-options-panel{gap:7px}
+ #app.reference-shell .publish-center .platform-settings-tabs .el-radio-button__inner{padding:7px 3px;font-size:12px}
+ #app.reference-shell .compact-task-panel{min-height:110px}
+ #app.reference-shell .compact-task-heading{font-size:14px;margin-bottom:6px}
+ #app.reference-shell .compact-task-row{min-height:29px}
+ #app.reference-shell .reference-task-empty{min-height:40px}
+ #app.reference-shell .reference-import-source{font-size:10px;line-height:16px;margin-top:4px!important}
+ #app.reference-shell .schedule-panel:not(.is-scheduled){display:flex;align-items:center;gap:12px}
+ #app.reference-shell .schedule-panel:not(.is-scheduled) .panel-caption{border:0;margin:0;padding:0}
+ #app.reference-shell .schedule-panel:not(.is-scheduled) .schedule-section{display:block}
+ #app.reference-shell .schedule-panel:not(.is-scheduled) .schedule-section>h3{display:none!important}
+}
+@media(max-width:1100px){#app.reference-shell .publish-center .file-item{grid-template-columns:120px minmax(0,1fr) 80px}#app.reference-shell .selected-video-preview{width:120px;height:78px}#app.reference-shell .publish-center .account-platform-card{grid-template-columns:18px 92px minmax(0,1fr) 18px;gap:7px}.reference-publish-topbar{gap:15px;padding:0 14px}}
+@media(max-width:930px){#app.reference-shell .sidebar .logo{padding:0 10px}#app.reference-shell .sidebar-menu .el-menu-item{padding:0!important;justify-content:center}#app.reference-shell .sidebar-menu .el-menu-item .el-icon{margin:0}#app.reference-shell .sidebar-menu .el-menu-item span{display:none}#app.reference-shell.publish-shell .el-main{padding:12px 12px 90px}#app.reference-shell .publish-grid{grid-template-columns:minmax(0,1fr)}#app.reference-shell .publish-center .action-buttons{left:64px;height:65px;min-height:65px;padding:9px 12px!important}#app.reference-shell .publish-center .action-buttons>.el-button{height:38px;min-width:0;padding:0 12px}#app.reference-shell .publish-center .publish-summary{display:none}.reference-workspace-title{font-size:17px}.reference-publish-topbar{gap:12px}#app.reference-shell .reference-tabs .tab-actions{gap:4px}#app.reference-shell .reference-tabs .tab-actions .el-button{font-size:11px!important;padding:0 6px}.reference-tabs .tab-actions .el-button .el-icon{display:none}#app.reference-shell .panel-caption .reference-caption-note{font-size:10px}.reference-import-source{overflow-wrap:anywhere}}
+@media(max-width:570px){#app.reference-shell .reference-tabs .tab-actions>.el-button{font-size:0!important;width:27px;padding:0}#app.reference-shell .reference-tabs .tab-actions>.el-button .el-icon{display:block;font-size:15px;margin:0}#app.reference-shell .reference-tabs .tab-item{font-size:12px!important;padding:0 8px!important;gap:3px}.reference-workspace-title{font-size:15px}.reference-publish-topbar{padding:0 10px;gap:10px}#app.reference-shell .publish-center .file-item{grid-template-columns:95px minmax(0,1fr)}#app.reference-shell .selected-video-preview{width:95px;height:65px}#app.reference-shell .video-item-actions{grid-column:1/-1;grid-row:3;flex-direction:row;justify-self:start}#app.reference-shell .publish-center .video-cover-grid{grid-template-columns:1fr}#app.reference-shell .publish-center .video-cover-upload .el-upload{height:150px}#app.reference-shell .basic-panel :is(.title-section,.topic-section){grid-template-columns:1fr;gap:6px}#app.reference-shell .basic-panel .topic-display{flex-wrap:wrap}#app.reference-shell .publish-center .account-platform-card{grid-template-columns:18px 86px minmax(0,1fr) 18px;gap:6px}#app.reference-shell .account-display-name{font-size:11px}#app.reference-shell .reference-task-counts{font-size:9px}#app.reference-shell .compact-task-row>.reference-mini-progress{display:none}#app.reference-shell .publish-center .action-buttons>.publish-submit{font-size:12px}#app.reference-shell .task-dock-summary strong{font-size:10px}#app.reference-shell .task-dock-summary small{display:none}#app.reference-shell .schedule-controls{flex-wrap:wrap}#app.reference-shell .schedule-panel .schedule-section{grid-template-columns:1fr!important}}
+
+/* Keep status in the fixed publishing bar and reserve space for card footers. */
+#app.reference-shell .publish-submit-notice{flex:1;min-width:0;padding:8px 12px;border-radius:6px;background:#f4f6f8;color:#596474;font-size:12px;line-height:18px;overflow-wrap:anywhere}
+#app.reference-shell .publish-submit-notice.notice-warning{background:#fff7e8;color:#b87513}
+#app.reference-shell .publish-submit-notice.notice-error{background:#fff1f0;color:#d94b4b}
+#app.reference-shell .basic-panel{padding-bottom:14px!important}
+#app.reference-shell .basic-panel .topic-section{margin-bottom:0!important;flex-shrink:0}
+#app.reference-shell .reference-import-source{flex:0 0 auto;position:static;clear:both}
+#app.reference-shell .cover-file-name{flex:0 0 auto}
+@media(min-width:1200px) and (min-height:900px){
+ #app.reference-shell .publish-main-column{grid-template-rows:196fr minmax(164px,164fr) 359fr minmax(96px,92fr)}
+ #app.reference-shell .covers-panel .video-cover-card{min-height:0}
+ #app.reference-shell .covers-panel .video-cover-card>strong,#app.reference-shell .covers-panel .video-cover-card>.optional-hint{flex-shrink:0}
+ #app.reference-shell .covers-panel .video-cover-card .video-cover-upload{position:relative;flex:1 1 0!important;height:auto;min-height:50px;overflow:hidden}
+ #app.reference-shell .covers-panel .video-cover-upload .el-upload{position:absolute;inset:0;height:100%;width:100%}
+}
+@media(max-width:570px){#app.reference-shell .publish-submit-notice{font-size:10px;line-height:14px;padding:4px;max-height:48px;overflow:auto}}
+
+/* Keep next episode immediately to the left of delete in the material card. */
+#app.reference-shell .publish-center .file-item{grid-template-columns:190px minmax(0,1fr) 174px;column-gap:12px}
+#app.reference-shell .file-item .video-item-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;flex-direction:initial}
+#app.reference-shell .file-item .video-item-actions .el-button{min-width:0;width:100%;height:32px;padding:0 6px;margin:0;font-size:12px}
+#app.reference-shell .file-item .video-item-actions .el-icon{font-size:13px;margin-right:4px}
+#app.reference-shell .file-item>.material-publication-marks{grid-column:2;grid-row:3;font-size:10px;margin:0}
+#app.reference-shell .file-item>.material-publication-marks:empty{display:none}
+@media(max-width:570px){#app.reference-shell .publish-center .file-item{grid-template-columns:95px minmax(0,1fr)}#app.reference-shell .file-item .video-item-actions{grid-column:1/-1;grid-row:4;width:100%;grid-template-columns:repeat(4,minmax(0,1fr))}}

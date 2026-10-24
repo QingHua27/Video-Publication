@@ -1,4 +1,7 @@
+from utils.early_video_cover import prepare_video_and_cover, cover_entry_available
+from utils.publish_windows import launch_browser
 # -*- coding: utf-8 -*-
+from utils.publish_jobs import report_stage
 import random
 from datetime import datetime
 from pathlib import Path
@@ -32,11 +35,11 @@ def _build_launch_kwargs(headless: bool) -> dict:
 async def _launch_browser(playwright: Playwright, headless: bool):
     launch_kwargs = _build_launch_kwargs(headless)
     try:
-        return await playwright.chromium.launch(**launch_kwargs)
+        return await launch_browser(playwright.chromium, **launch_kwargs)
     except Exception:
         if "channel" not in launch_kwargs:
             launch_kwargs["channel"] = "chrome"
-            return await playwright.chromium.launch(**launch_kwargs)
+            return await launch_browser(playwright.chromium, **launch_kwargs)
         raise
 
 
@@ -105,7 +108,7 @@ async def baijiahao_cookie_gen(account_file):
             'headless': LOCAL_CHROME_HEADLESS,  # Set headless option here
         }
         # Make sure to run headed.
-        browser = await playwright.chromium.launch(**options)
+        browser = await launch_browser(playwright.chromium, **options)
         # Setup context however you like.
         context = await browser.new_context()  # Pass any options
         context = await set_init_script(context)
@@ -120,7 +123,7 @@ async def baijiahao_cookie_gen(account_file):
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await launch_browser(playwright.chromium, headless=LOCAL_CHROME_HEADLESS)
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -146,7 +149,7 @@ async def baijiahao_setup(account_file, handle=False):
     return True
 
 class BaiJiaHaoVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, proxy_setting=None):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, proxy_setting=None, dry_run=False):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -156,6 +159,7 @@ class BaiJiaHaoVideo(object):
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
         self.proxy_setting = proxy_setting
+        self.dry_run = bool(dry_run)
 
     async def set_schedule_time(self, page, publish_date):
         """
@@ -203,7 +207,9 @@ class BaiJiaHaoVideo(object):
 
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
-        browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path, proxy=self.proxy_setting)
+        launch_options = _build_launch_kwargs(self.headless)
+        if self.proxy_setting: launch_options['proxy'] = self.proxy_setting
+        browser = await launch_browser(playwright.chromium, **launch_options)
         # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(storage_state=f"{self.account_file}", user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.4324.150 Safari/537.36')
         # context = await set_init_script(context)
@@ -219,7 +225,12 @@ class BaiJiaHaoVideo(object):
         await page.wait_for_url("https://baijiahao.baidu.com/builder/rc/edit?type=videoV2", timeout=60000)
 
         # 点击 "上传视频" 按钮
-        await page.locator("div[class^='video-main-container'] input").set_input_files(self.file_path)
+        video_inputs=page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="mp4"], div[class^="video-main-container"] input[type="file"]')
+        try:
+            await video_inputs.first.wait_for(state='attached',timeout=30000)
+            await video_inputs.first.set_input_files(self.file_path,timeout=30000)
+        except Exception as error:
+            raise RuntimeError('百家号未找到视频上传控件，请检查登录状态及发布页面，未执行发布') from error
 
         # 等待页面跳转到指定的 URL
         while True:
@@ -237,27 +248,21 @@ class BaiJiaHaoVideo(object):
         baijiahao_logger.info("正在填充标题和话题...")
         await self.add_title_tags(page)
 
-        upload_status = await self.uploading_video(page)
-        if not upload_status:
-            baijiahao_logger.error(f"发现上传出错了... 文件:{self.file_path}")
-            raise
-
-        # 判断视频封面图是否生成成功
-        while True:
-            baijiahao_logger.info("正在确认封面完成, 准备去点击定时/发布...")
-            if await page.locator("div.cheetah-spin-container img").count():
-                baijiahao_logger.info("封面已完成，点击定时/发布...")
-                break
-            else:
-                baijiahao_logger.info("等待封面生成...")
-                await asyncio.sleep(3)
-
+        from utils.video_covers import apply_baijiahao_video_cover
+        cover=getattr(self,'thumbnail_path',None)
+        await prepare_video_and_cover(
+            lambda:self.uploading_video(page),
+            lambda:cover_entry_available(page,selectors=('.form-cover [class*="cover-container"]',)),
+            lambda:apply_baijiahao_video_cover(page,cover),required=bool(cover))
+        from utils.publish_collections import apply_video_collection
+        await apply_video_collection(page, 5, getattr(self, 'collection_name', ''))
+        if self.dry_run:
+            await page.wait_for_timeout(3000)
+            await context.close()
+            await browser.close()
+            return
         await self.publish_video(page, self.publish_date)
-        await page.wait_for_timeout(2000)
-        if await page.locator('div.passMod_dialog-container >> text=百度安全验证:visible').count():
-            baijiahao_logger.error("出现验证，退出")
-            raise Exception("出现验证，退出")
-        await page.wait_for_url("https://baijiahao.baidu.com/builder/rc/clue**", timeout=5000)
+        await self.wait_for_publish_result(page)
         baijiahao_logger.success("视频发布成功")
 
         await context.storage_state(path=self.account_file)  # 保存cookie
@@ -268,25 +273,18 @@ class BaiJiaHaoVideo(object):
         await browser.close()
 
 
-    @async_retry(timeout=300)  # 例如，最多重试3次，超时时间为180秒
     async def uploading_video(self, page):
-        while True:
-            upload_failed = await page.locator('div .cover-overlay:has-text("上传失败")').count()
-            if upload_failed:
-                baijiahao_logger.error("发现上传出错了...")
-                # await self.handle_upload_error(page)  # 假设这是处理上传错误的函数
-                return False
-
-            uploading = await page.locator('div .cover-overlay:has-text("上传中")').count()
-            if uploading:
-                baijiahao_logger.info("正在上传视频中...")
-                await asyncio.sleep(2)  # 等待2秒再次检查
-                continue
-
-            # 检查上传是否成功
-            if not uploading and not upload_failed:
-                baijiahao_logger.success("视频上传完毕")
-                return True
+        report_stage('等待视频上传完成',40)
+        stable=0
+        await page.locator('.cover-tabs-container').first.wait_for(state='attached',timeout=60000)
+        for _ in range(600):
+            text=await page.locator('.cover-tabs-container').first.inner_text(timeout=5000)
+            if '上传失败' in text:return False
+            busy=__import__('re').search(r'上传中|正在上传|转码中|处理中',text) or any(float(n)<100 for n in __import__('re').findall(r'(\d+(?:\.\d+)?)%',text))
+            stable=0 if busy else stable+1
+            if stable>=3:return True
+            await asyncio.sleep(1)
+        raise RuntimeError('百家号视频上传超时，未设置封面或发布')
 
     async def set_schedule_publish(self, page, publish_date):
         while True:
@@ -303,8 +301,8 @@ class BaiJiaHaoVideo(object):
                 baijiahao_logger.error(f"定时发布失败: {e}")
                 raise  # 重新抛出异常，让重试装饰器捕获
 
-    @async_retry(timeout=300)  # 例如，最多重试3次，超时时间为180秒
     async def publish_video(self, page: Page, publish_date):
+        report_stage('提交发布',90)
         if publish_date != 0:
             # 定时发布
             await self.set_schedule_publish(page, publish_date)
@@ -312,19 +310,42 @@ class BaiJiaHaoVideo(object):
             # 立即发布
             await self.direct_publish(page)
 
+    async def wait_for_publish_result(self, page, attempts=60):
+        report_stage('核对平台提交结果',95)
+        from utils.publish_diagnostics import capture_editor_failure
+        for _ in range(attempts):
+            for frame in page.frames:
+                challenge=frame.get_by_text('百度安全验证',exact=True).or_(frame.get_by_text('请完成下方验证后继续操作',exact=True))
+                for index in range(await challenge.count()):
+                    if await challenge.nth(index).is_visible():
+                        await capture_editor_failure(page,'baijiahao','security-verification')
+                        raise RuntimeError('百家号要求百度安全验证，请到百家号后台手动完成验证并核对作品状态；请勿重复提交')
+            success=page.get_by_text('发布成功',exact=True).or_(page.get_by_text('提交成功',exact=True))
+            for index in range(await success.count()):
+                if await success.nth(index).is_visible():return
+            if page.url.startswith('https://baijiahao.baidu.com/builder/rc/clue'):
+                return
+            await page.wait_for_timeout(1000)
+        path=await capture_editor_failure(page,'baijiahao','publish-result')
+        raise RuntimeError(f'百家号已点击发布，但未确认提交结果，请先到平台核对作品/审核状态，勿重复提交；页面截图：{path}')
+
     async def direct_publish(self, page):
         try:
-            publish_button = page.locator("button >> text=发布")
-            if await publish_button.count():
-                await publish_button.click()
+            publish_button = page.get_by_role('button', name='发布', exact=True)
+            await publish_button.wait_for(state='visible', timeout=15000)
+            await publish_button.click(timeout=15000)
         except Exception as e:
             baijiahao_logger.error(f"直接发布视频失败: {e}")
             raise  # 重新抛出异常，让重试装饰器捕获
 
     async def add_title_tags(self, page):
-        title_container = page.get_by_placeholder('添加标题获得更多推荐')
-        if len(self.title) <= 8:
-            self.title += " 你不知道的"
+        report_stage('填写标题',45)
+        title_container = page.locator('input[placeholder*="标题"]:visible, textarea[placeholder*="标题"]:visible, [contenteditable="true"][data-placeholder*="标题"]:visible, [role="textbox"][contenteditable="true"][class*="FeEditorApp"]:visible').first
+        try:await title_container.wait_for(state='visible',timeout=15000)
+        except Exception as error:
+            from utils.publish_diagnostics import capture_editor_failure
+            path=await capture_editor_failure(page,'baijiahao','title')
+            raise RuntimeError(f'百家号发布页未找到可用标题框，未发布；页面截图：{path}') from error
         await title_container.fill(self.title[:30])
 
     async def main(self):
@@ -336,7 +357,9 @@ class BaiJiaHaoVideo(object):
     # 使用 AI成片 功能
     async def ai2video(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
-        browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path, proxy=self.proxy_setting)
+        launch_options = _build_launch_kwargs(self.headless)
+        if self.proxy_setting: launch_options['proxy'] = self.proxy_setting
+        browser = await launch_browser(playwright.chromium, **launch_options)
         # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(
             viewport={"width": 1600, "height": 900},
@@ -359,7 +382,12 @@ class BaiJiaHaoVideo(object):
         await asyncio.sleep(1)  # 这里延迟是为了方便眼睛直观的观看
 
         # 点击 "上传视频" 按钮
-        # await page.locator("div[class^='video-main-container'] input").set_input_files(self.file_path)
+        # video_inputs=page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="mp4"], div[class^="video-main-container"] input[type="file"]')
+        try:
+            await video_inputs.first.wait_for(state='attached',timeout=30000)
+            await video_inputs.first.set_input_files(self.file_path,timeout=30000)
+        except Exception as error:
+            raise RuntimeError('百家号未找到视频上传控件，请检查登录状态及发布页面，未执行发布') from error
 
         # region 操作处
 

@@ -166,7 +166,7 @@ def parse_bilibili_list_payload(payload: dict, limit: int = 5) -> list[dict]:
     return items
 
 
-def fetch_archives_payload(cookies: dict[str, str], page_size: int = 20) -> dict:
+def fetch_archives_payload(cookies: dict[str, str], page_size: int = 20, page: int = 1, status: str = DEFAULT_STATUS) -> dict:
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -177,8 +177,8 @@ def fetch_archives_payload(cookies: dict[str, str], page_size: int = 20) -> dict
         "Origin": "https://member.bilibili.com",
     }
     params = {
-        "status": DEFAULT_STATUS,
-        "pn": 1,
+        "status": status,
+        "pn": page,
         "ps": max(1, min(int(page_size), 50)),
         "coop": 1,
         "interactive": 1,

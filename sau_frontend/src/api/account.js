@@ -2,6 +2,9 @@ import { http } from '@/utils/request'
 
 // 账号管理相关API
 export const accountApi = {
+  openBackend(accountId) {
+    return http.post('/account/openBackend', {accountId}, {headers:{'X-OmniPost-Local':'1'},silentError:true})
+  },
   // 获取有效账号列表（带验证）；type 可选，指定时只校验该平台账号
   getValidAccounts(type) {
     const params = type != null ? { type } : undefined

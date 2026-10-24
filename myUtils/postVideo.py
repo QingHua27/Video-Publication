@@ -1,7 +1,8 @@
 import asyncio
 from pathlib import Path
 
-from conf import BASE_DIR
+from conf import BASE_DIR, PUBLISH_BROWSER_HEADLESS
+from utils.publish_collections import bilibili_collection_fields
 from uploader.baijiahao_uploader.main import BaiJiaHaoVideo, BaiJiaHaoArticle
 from uploader.bilibili_uploader.runtime import run_biliup_command
 from uploader.douyin_uploader.main import (
@@ -23,7 +24,16 @@ from utils.constant import TencentZoneTypes
 from utils.files_times import generate_schedule_time_next_day
 
 
-def post_video_tencent(title,files,tags,account_file,category=TencentZoneTypes.LIFESTYLE.value,enableTimer=False,videos_per_day = 1, daily_times=None,start_days = 0, is_draft=False, dry_run=False, ai_generated=False):
+def resolve_video_cover(value):
+    if not value:
+        return None
+    path = (BASE_DIR / 'videoFile' / str(value)).resolve()
+    if not path.is_file():
+        raise FileNotFoundError('所选封面不存在，请重新上传')
+    return str(path)
+
+
+def post_video_tencent(title,files,tags,account_file,category=TencentZoneTypes.LIFESTYLE.value,enableTimer=False,videos_per_day = 1, daily_times=None,start_days = 0, is_draft=False, dry_run=False, ai_generated=False, collection_name='', thumbnail_path=''):
     # 生成文件的完整路径
     account_file = [Path(BASE_DIR / "cookiesFile" / file) for file in account_file]
     files = [Path(BASE_DIR / "videoFile" / file) for file in files]
@@ -55,9 +65,10 @@ def post_video_tencent(title,files,tags,account_file,category=TencentZoneTypes.L
                     else TENCENT_PUBLISH_STRATEGY_IMMEDIATE
                 ),
             )
-            if dry_run:
-                kwargs["headless"] = False
+            kwargs["headless"] = False if dry_run else PUBLISH_BROWSER_HEADLESS
+            kwargs["thumbnail_path"] = resolve_video_cover(thumbnail_path)
             app = TencentVideo(**kwargs)
+            app.collection_name = collection_name
             asyncio.run(app.main(), debug=False)
 
 
@@ -65,7 +76,7 @@ def post_video_DouYin(title,files,tags,account_file,category=TencentZoneTypes.LI
                       thumbnail_path = '',
                       productLink = '', productTitle = '',
                       ai_generated = False,
-                      dry_run = False):
+                      dry_run = False, collection_name='', portrait_cover=''):
     # 生成文件的完整路径
     account_file = [Path(BASE_DIR / "cookiesFile" / file) for file in account_file]
     files = [Path(BASE_DIR / "videoFile" / file) for file in files]
@@ -87,7 +98,8 @@ def post_video_DouYin(title,files,tags,account_file,category=TencentZoneTypes.LI
                 tags=tags,
                 publish_date=publish_datetimes[index],
                 account_file=cookie,
-                thumbnail_landscape_path=thumbnail_path,
+                thumbnail_landscape_path=resolve_video_cover(thumbnail_path),
+                thumbnail_portrait_path=resolve_video_cover(portrait_cover),
                 productLink=productLink,
                 productTitle=productTitle,
                 ai_generated=ai_generated,
@@ -98,13 +110,13 @@ def post_video_DouYin(title,files,tags,account_file,category=TencentZoneTypes.LI
                     else DOUYIN_PUBLISH_STRATEGY_IMMEDIATE
                 ),
             )
-            if dry_run:
-                kwargs["headless"] = False
+            kwargs["headless"] = False if dry_run else PUBLISH_BROWSER_HEADLESS
             app = DouYinVideo(**kwargs)
+            app.collection_name = collection_name
             asyncio.run(app.douyin_upload_video(), debug=False)
 
 
-def post_video_ks(title,files,tags,account_file,category=TencentZoneTypes.LIFESTYLE.value,enableTimer=False,videos_per_day = 1, daily_times=None,start_days = 0, dry_run=False, ai_generated=False):
+def post_video_ks(title,files,tags,account_file,category=TencentZoneTypes.LIFESTYLE.value,enableTimer=False,videos_per_day = 1, daily_times=None,start_days = 0, dry_run=False, ai_generated=False, collection_name='', thumbnail_path=''):
     # 生成文件的完整路径
     account_file = [Path(BASE_DIR / "cookiesFile" / file) for file in account_file]
     files = [Path(BASE_DIR / "videoFile" / file) for file in files]
@@ -129,12 +141,13 @@ def post_video_ks(title,files,tags,account_file,category=TencentZoneTypes.LIFEST
                 dry_run=dry_run,
                 ai_generated=ai_generated,
             )
-            if dry_run:
-                kwargs["headless"] = False
+            kwargs["headless"] = False if dry_run else PUBLISH_BROWSER_HEADLESS
+            kwargs["thumbnail_path"] = resolve_video_cover(thumbnail_path)
             app = KSVideo(**kwargs)
+            app.collection_name = collection_name
             asyncio.run(app.main(), debug=False)
 
-def post_video_xhs(title,files,tags,account_file,category=TencentZoneTypes.LIFESTYLE.value,enableTimer=False,videos_per_day = 1, daily_times=None,start_days = 0, dry_run=False, ai_generated=False):
+def post_video_xhs(title,files,tags,account_file,category=TencentZoneTypes.LIFESTYLE.value,enableTimer=False,videos_per_day = 1, daily_times=None,start_days = 0, dry_run=False, ai_generated=False, collection_name='', thumbnail_path=''):
     # 生成文件的完整路径
     account_file = [Path(BASE_DIR / "cookiesFile" / file) for file in account_file]
     files = [Path(BASE_DIR / "videoFile" / file) for file in files]
@@ -159,14 +172,15 @@ def post_video_xhs(title,files,tags,account_file,category=TencentZoneTypes.LIFES
                 dry_run=dry_run,
                 ai_generated=ai_generated,
             )
-            if dry_run:
-                kwargs["headless"] = False
+            kwargs["headless"] = False if dry_run else PUBLISH_BROWSER_HEADLESS
+            kwargs["thumbnail_path"] = resolve_video_cover(thumbnail_path)
             app = XiaoHongShuVideo(**kwargs)
+            app.collection_name = collection_name
             asyncio.run(app.main(), debug=False)
 
 
 
-def post_video_baijiahao(title, files, tags, account_file, category=TencentZoneTypes.LIFESTYLE.value, enableTimer=False, videos_per_day=1, daily_times=None, start_days=0, dry_run=False):
+def post_video_baijiahao(title, files, tags, account_file, category=TencentZoneTypes.LIFESTYLE.value, enableTimer=False, videos_per_day=1, daily_times=None, start_days=0, dry_run=False, collection_name='', thumbnail_path=''):
     account_file = [Path(BASE_DIR / "cookiesFile" / file) for file in account_file]
     files = [Path(BASE_DIR / "videoFile" / file) for file in files]
     for file in files:
@@ -185,13 +199,14 @@ def post_video_baijiahao(title, files, tags, account_file, category=TencentZoneT
             print(f"标题：{title}", flush=True)
             print(f"Hashtag：{tags}", flush=True)
             app = BaiJiaHaoVideo(title, str(file), tags, publish_datetimes[index], str(cookie), dry_run=dry_run)
-            if dry_run:
-                app.headless = False
+            app.collection_name = collection_name
+            app.thumbnail_path = resolve_video_cover(thumbnail_path)
+            app.headless = False if dry_run else PUBLISH_BROWSER_HEADLESS
             asyncio.run(app.main(), debug=False)
             print(f"✅ 百家号发布流程结束: {file}", flush=True)
 
 
-def post_video_toutiao(title, files, tags, account_file, category=TencentZoneTypes.LIFESTYLE.value, enableTimer=False, videos_per_day=1, daily_times=None, start_days=0, dry_run=False):
+def post_video_toutiao(title, files, tags, account_file, category=TencentZoneTypes.LIFESTYLE.value, enableTimer=False, videos_per_day=1, daily_times=None, start_days=0, dry_run=False, thumbnail_path=''):
     account_file = [Path(BASE_DIR / "cookiesFile" / file) for file in account_file]
     files = [Path(BASE_DIR / "videoFile" / file) for file in files]
     if enableTimer:
@@ -206,8 +221,8 @@ def post_video_toutiao(title, files, tags, account_file, category=TencentZoneTyp
             print(f"Hashtag：{tags}")
             print(f"仅预览不发布：{dry_run}")
             app = TouTiaoVideo(title, str(file), tags, publish_datetimes[index], cookie, dry_run=dry_run)
-            if dry_run:
-                app.headless = False
+            app.thumbnail_path = resolve_video_cover(thumbnail_path)
+            app.headless = False if dry_run else PUBLISH_BROWSER_HEADLESS
             asyncio.run(app.main(), debug=False)
 
 
@@ -281,8 +296,7 @@ def post_article_toutiao(
             cover_path=cover,
             work_statements=work_statements,
         )
-        if dry_run:
-            app.headless = False
+        app.headless = False if dry_run else PUBLISH_BROWSER_HEADLESS
         asyncio.run(app.main(), debug=False)
 
 
@@ -365,8 +379,7 @@ def post_article_baijiahao(
             cover_path=cover,
             ai_generated=ai_generated,
         )
-        if dry_run:
-            app.headless = False
+        app.headless = False if dry_run else PUBLISH_BROWSER_HEADLESS
         asyncio.run(app.main(), debug=False)
         print(f"✅ 百家号图文文章发布流程结束", flush=True)
 
@@ -460,8 +473,7 @@ def post_article_sohu(
             cover_paths=resolved_covers,
             info_source=info_source,
         )
-        if dry_run:
-            app.headless = False
+        app.headless = False if dry_run else PUBLISH_BROWSER_HEADLESS
         asyncio.run(app.main(), debug=False)
         print(f"✅ 搜狐号图文文章发布流程结束", flush=True)
 
@@ -539,8 +551,7 @@ def post_article_zhihu(
             cover_path=cover,
             creation_statement=creation_statement,
         )
-        if dry_run:
-            app.headless = False
+        app.headless = False if dry_run else PUBLISH_BROWSER_HEADLESS
         asyncio.run(app.main(), debug=False)
         print(f"✅ 知乎文章发布流程结束", flush=True)
 
@@ -561,7 +572,7 @@ def _build_bilibili_creation_extra_fields(creation_statement):
     return json.dumps({"creation_statement": {"id": statement_id}}, ensure_ascii=False, separators=(",", ":"))
 
 
-def post_video_bilibili(title, files, tags, account_file, category=None, enableTimer=False, videos_per_day=1, daily_times=None, start_days=0, dry_run=False, creation_statement=None):
+def post_video_bilibili(title, files, tags, account_file, category=None, enableTimer=False, videos_per_day=1, daily_times=None, start_days=0, dry_run=False, creation_statement=None, collection_name='', thumbnail_path='', recommendation_cover=''):
     """通过biliup CLI发布Bilibili视频
 
     creation_statement: B站创作声明 id
@@ -582,6 +593,11 @@ def post_video_bilibili(title, files, tags, account_file, category=None, enableT
     # 注意：Web 发布页的 category 目前只表示视频号原创，B站这里通常会落到默认 21
     tid = int(category) if category else 21
     extra_fields = _build_bilibili_creation_extra_fields(creation_statement)
+    if collection_name:
+        import json
+        fields = json.loads(extra_fields) if extra_fields else {}
+        fields.update(bilibili_collection_fields(collection_name))
+        extra_fields = json.dumps(fields, ensure_ascii=False, separators=(',', ':'))
     print(
         f"🎬 开始B站发布: files={len(files)}, accounts={len(account_file_paths)}, "
         f"tid={tid}, dry_run={dry_run}, creation_statement={creation_statement}",
@@ -603,14 +619,24 @@ def post_video_bilibili(title, files, tags, account_file, category=None, enableT
             if dry_run:
                 print("🛑 【仅预览不发布】B站走 biliup CLI，无浏览器可预览，已跳过实际上传", flush=True)
                 continue
+            current_extra_fields = extra_fields
+            if recommendation_cover:
+                import json
+                from uploader.bilibili_uploader.covers import upload_recommendation_cover
+                fields = json.loads(extra_fields) if extra_fields else {}
+                fields['cover43'] = upload_recommendation_cover(resolve_video_cover(recommendation_cover), cookie_file)
+                current_extra_fields = json.dumps(fields, ensure_ascii=False, separators=(',', ':'))
             arguments = [
                 "-u", str(cookie_file),
                 "upload", str(file),
+                "--line", "tx",
                 "--title", title,
                 "--desc", title,
                 "--tid", str(tid),
                 "--copyright", "1",
             ]
+            if thumbnail_path:
+                arguments.extend(["--cover", resolve_video_cover(thumbnail_path)])
             if tags:
                 arguments.extend(["--tag", ",".join(tags)])
             if publish_datetimes[index] != 0:
@@ -620,9 +646,14 @@ def post_video_bilibili(title, files, tags, account_file, category=None, enableT
                 else:
                     dtime = str(int(publish_datetimes[index]))
                 arguments.extend(["--dtime", dtime])
-            if extra_fields:
-                arguments.extend(["--extra-fields", extra_fields])
+            if current_extra_fields:
+                arguments.extend(["--extra-fields", current_extra_fields])
+            # CLI defaults to the App endpoint; always use the Web endpoint
+            # regardless of optional collection/cover settings.
+            arguments.extend(['--submit', 'web'])
             print(f"🚀 调用 biliup: {' '.join(arguments)}", flush=True)
+            from utils.publish_jobs import report_stage
+            report_stage('上传视频并提交B站',35)
             result = run_biliup_command(arguments)
             stdout_text = (result.stdout or "").strip()
             stderr_text = (result.stderr or "").strip()
@@ -633,6 +664,10 @@ def post_video_bilibili(title, files, tags, account_file, category=None, enableT
             if result.returncode != 0:
                 error_msg = stderr_text or stdout_text
                 print(f"❌ Bilibili上传失败 (code={result.returncode}): {error_msg}", flush=True)
+                if '21566' in error_msg:
+                    raise RuntimeError('B站拒绝本次投稿（21566：投稿频率或接口风控限制），尚未确认发布。请先到B站核对；如已手动发布，请补记已发布，不要重复重试。详细信息已记录到后台日志')
+                if 'certificate' in error_msg.lower() and ('expired' in error_msg.lower() or 'invalid peer' in error_msg.lower()):
+                    raise RuntimeError('B站上传连接的证书校验失败，尚未完成发布；请检查代理或上传线路。详细信息已记录到后台日志')
                 raise RuntimeError(error_msg or "Bilibili upload failed")
             print("✅ Bilibili上传成功", flush=True)
 

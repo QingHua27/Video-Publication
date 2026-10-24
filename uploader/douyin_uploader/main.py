@@ -1,4 +1,7 @@
+from utils.upload_progress import report_upload_wait
+from utils.publish_windows import launch_browser
 # -*- coding: utf-8 -*-
+from utils.publish_jobs import report_stage, report_phase, phase_scope
 from datetime import datetime
 
 import asyncio
@@ -50,7 +53,7 @@ def _build_login_result(success: bool, status: str, message: str, account_file: 
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=True, channel="chrome")
         try:
             context = await browser.new_context(storage_state=account_file)
             context = await set_init_script(context)
@@ -176,7 +179,7 @@ async def douyin_cookie_gen(
     headless: bool = LOCAL_CHROME_HEADLESS,
 ):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=headless, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=headless, channel="chrome")
         context = await browser.new_context()
         context = await set_init_script(context)
         qrcode_path = None
@@ -347,28 +350,35 @@ class DouYinBaseUploader(BaseVideoUploader):
         )
 
     async def fill_title_and_description(self, page: Page, title: str, description: str, tags: list[str] | None = None):
+        report_stage('填写标题与描述',45)
         description_section = (
             page.get_by_text("作品描述", exact=True)
             .locator("xpath=ancestor::div[2]")
             .locator("xpath=following-sibling::div[1]")
         )
 
-        title_input = description_section.locator('input[type="text"]').first
-        await title_input.wait_for(state="visible", timeout=10000)
-        # 标题允许为空，空字符串时清空输入框即可
-        await title_input.fill((title or "")[:30])
-
-        description_editor = description_section.locator('.zone-container[contenteditable="true"]').first
-        await description_editor.wait_for(state="visible", timeout=10000)
+        title_candidates = [page.locator('input[placeholder*="标题"]:visible').first, description_section.locator('input[type="text"]:visible').first]
+        title_input = None
+        for candidate in title_candidates:
+            if await candidate.count() and await candidate.is_visible():
+                title_input=candidate
+                break
+        if title_input is None:raise RuntimeError('抖音未找到标题输入框，发布页面可能尚未加载或已改版，未执行发布')
+        try:await title_input.fill((title or '')[:30],timeout=10000)
+        except Exception as error:raise RuntimeError('抖音标题输入失败，请检查发布页是否有弹窗或上传错误') from error
+        editors = page.locator('[contenteditable="true"]:visible')
+        description_editor = description_section.locator('.zone-container[contenteditable="true"]:visible').first
+        if not await description_editor.count():description_editor=editors.first
+        await description_editor.wait_for(state='visible',timeout=10000)
         await description_editor.click()
-        await page.keyboard.press("Control+KeyA")
-        await page.keyboard.press("Delete")
-        if description:
-            await page.keyboard.type(description)
+        await page.keyboard.press('Control+KeyA')
+        await page.keyboard.press('Delete')
+        if description:await page.keyboard.type(description)
 
         for tag in tags or []:
             await page.keyboard.type(" #" + tag)
             await page.keyboard.press("Space")
+        report_phase('metadata','completed','标题和描述填写完成')
 
     async def set_location(self, page: Page, location: str = ""):
         if not location:
@@ -716,7 +726,7 @@ class DouYinVideo(DouYinBaseUploader):
                     dialog.locator(".semi-modal-footer .semi-button-primary").first,
                     dialog.locator('button.semi-button-primary:has-text("确定")').first,
                     dialog.get_by_role("button", name="确定").first,
-                    dialog.locator('button:has-text("确定")').last,
+                    dialog.locator('button:has-text("确定")').first,
                 ]
             )
         confirm_candidates.extend(
@@ -724,7 +734,7 @@ class DouYinVideo(DouYinBaseUploader):
                 page.locator('.semi-modal-footer button:has-text("确定"):visible').first,
                 page.locator(".semi-modal-footer .semi-button-primary:visible").first,
                 page.locator('div[role="dialog"] button:has-text("确定"):visible').first,
-                page.locator(".semi-modal-wrap button.semi-button-primary:visible").last,
+                page.locator(".semi-modal-wrap button.semi-button-primary:visible").first,
                 page.locator('button:has-text("确定"):visible').last,
             ]
         )
@@ -767,7 +777,7 @@ class DouYinVideo(DouYinBaseUploader):
                 continue
 
         try:
-            cancel = page.get_by_role("button", name="取消").last
+            cancel = page.get_by_role("button", name="取消").first
             if await cancel.count() and await cancel.is_visible():
                 sibling = cancel.locator("xpath=following-sibling::button[1]").first
                 if not await sibling.count():
@@ -831,40 +841,85 @@ class DouYinVideo(DouYinBaseUploader):
         return False
 
     async def set_thumbnail(self, page: Page):
+        report_stage('设置封面（视频可继续上传）',35)
         if not self.thumbnail_landscape_path and not self.thumbnail_portrait_path:
             return
 
         douyin_logger.info(_msg("🏃", "小人正在设置视频封面"))
         await page.click('text="选择封面"')
         cover_locator_str = 'div[id*="creator-content-modal"]'
-        cover_locator = page.locator(cover_locator_str)
+        cover_locator = page.locator(cover_locator_str).first
         await page.wait_for_selector(cover_locator_str)
 
-        upload_input = cover_locator.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input")
+        from utils.douyin_covers import upload_cover_for_orientation
+        try:
+            for kind,path in [('landscape',self.thumbnail_landscape_path),('portrait',self.thumbnail_portrait_path)]:
+                if path:
+                    await upload_cover_for_orientation(page,cover_locator,kind,path)
+                    douyin_logger.info(_msg('🖼️',f'{"横版" if kind=="landscape" else "竖版3:4"}封面已上传至对应入口'))
+        except Exception:
+            from utils.publish_diagnostics import capture_editor_failure
+            await capture_editor_failure(page,'douyin','cover-orientation')
+            raise
 
-        if self.thumbnail_landscape_path:
-            await page.wait_for_timeout(1000)
-            await upload_input.set_input_files(self.thumbnail_landscape_path)
-            await page.wait_for_timeout(2000)
-            douyin_logger.info(_msg("🖼️", "横版封面上传完成"))
+        from utils.cover_confirmation import finish_cover_dialog
+        await finish_cover_dialog(page,cover_locator,'抖音',('完成',))
+        douyin_logger.info(_msg("🥳", "视频封面设置完成，窗口已关闭"))
 
-        if self.thumbnail_portrait_path:
-            await cover_locator.locator("div[class*='steps'] div").nth(1).click()
-            await page.wait_for_timeout(1000)
-            await upload_input.set_input_files(self.thumbnail_portrait_path)
-            await page.wait_for_timeout(2000)
-            douyin_logger.info(_msg("🖼️", "竖版封面上传完成"))
-
-        await cover_locator.locator('button:visible:has-text("完成")').click()
-        douyin_logger.info(_msg("🥳", "视频封面设置完成"))
-        await page.wait_for_selector("div.extractFooter", state="detached")
+    async def prepare_video_and_covers(self, page: Page, timeout=1200, poll_interval=2):
+        """Prepare covers while the platform transfers the video; gate on both."""
+        deadline = asyncio.get_running_loop().time() + timeout
+        needs_cover = bool(self.thumbnail_landscape_path or self.thumbnail_portrait_path)
+        covers_ready = not needs_cover
+        report_phase('cover','waiting' if needs_cover else 'skipped','等待封面入口' if needs_cover else '未指定封面，使用平台默认封面')
+        while asyncio.get_running_loop().time() < deadline:
+            await report_upload_wait(page)
+            failed = page.locator('div.progress-div > div:has-text("上传失败")')
+            if await failed.count() and await failed.first.is_visible():
+                await self.handle_upload_error(page)
+                covers_ready = not needs_cover
+                await asyncio.sleep(poll_interval)
+                continue
+            video_complete = page.locator('[class^="long-card"] div:has-text("重新上传")')
+            video_ready = await video_complete.count() > 0 and await video_complete.first.is_visible()
+            if video_ready:report_phase('upload','completed','视频上传已完成',100)
+            if not covers_ready:
+                entries = page.get_by_text('选择封面', exact=True)
+                available = False
+                for index in range(await entries.count()):
+                    entry = entries.nth(index)
+                    if await entry.is_visible() and await entry.is_enabled():
+                        blocked = await entry.evaluate("el=>!!el.closest('[aria-disabled=true],button:disabled,.semi-button-disabled')")
+                        if not blocked:
+                            available = True
+                            break
+                if available or video_ready:
+                    douyin_logger.info(_msg('🖼️', '封面入口已可用，提前设置封面并等待处理完成'))
+                    # Keep one owner for all UI actions; video transfer continues
+                    # independently. Exceptions must stop publication, not be swallowed.
+                    with phase_scope('cover'):
+                        report_phase('cover','running','设置封面')
+                        try:await self.set_thumbnail(page)
+                        except Exception as error:
+                            report_phase('cover','failed',str(error));raise
+                    covers_ready = True
+                    report_phase('cover','completed','封面已确认完成')
+                    # Recheck video status after the modal closes; it may have
+                    # finished or failed during the cover operation.
+                    continue
+            if video_ready and covers_ready:
+                report_phase('preparation','completed','视频和封面均已就绪',overall_progress=70)
+                return
+            await asyncio.sleep(poll_interval)
+        report_phase('upload','failed','抖音视频上传超时，未执行发布')
+        raise RuntimeError('抖音视频上传超时，未执行发布')
 
     async def upload(self, playwright: Playwright) -> None:
         douyin_logger.info(_msg("🧍", "小人先检查 cookie、视频文件、封面和发布时间"))
         await self.validate_upload_args()
         douyin_logger.info(_msg("🥳", "上传前检查通过"))
 
-        browser = await playwright.chromium.launch(headless=self.headless, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=self.headless, channel="chrome")
         context = await browser.new_context(
             storage_state=f"{self.account_file}",
             permissions=["geolocation"],
@@ -903,30 +958,18 @@ class DouYinVideo(DouYinBaseUploader):
         await self.fill_title_and_description(page, self.title, self.desc or self.title, self.tags)
         douyin_logger.info(_msg("🏷️", f"小人一共贴了 {len(self.tags)} 个话题"))
 
-        while True:
-            try:
-                number = await page.locator('[class^="long-card"] div:has-text("重新上传")').count()
-                if number > 0:
-                    douyin_logger.success(_msg("🥳", "视频已经传完啦"))
-                    break
-                douyin_logger.info(_msg("🏃", "小人正在努力上传视频"))
-                await asyncio.sleep(2)
-                if await page.locator('div.progress-div > div:has-text("上传失败")').count():
-                    douyin_logger.error(_msg("😵", "检测到上传失败，小人准备重试"))
-                    await self.handle_upload_error(page)
-            except Exception:
-                douyin_logger.debug(_msg("🧍", "小人还在等视频上传完成"))
-                await asyncio.sleep(2)
+        await self.prepare_video_and_covers(page)
 
         if self.productLink and self.productTitle:
             douyin_logger.info(_msg("🛒", "小人正在设置商品链接"))
             await self.set_product_link(page, self.productLink, self.productTitle)
             douyin_logger.info(_msg("🥳", "商品链接设置完成"))
 
-        await self.set_thumbnail(page)
-
         # 自主声明：内容由AI生成
         await self.set_ai_generated_declaration(page)
+
+        from utils.publish_collections import apply_video_collection
+        await apply_video_collection(page, 3, getattr(self, 'collection_name', ''))
 
         third_part_element = '[class^="info"] > [class^="first-part"] div div.semi-switch'
         if await page.locator(third_part_element).count():
@@ -1154,7 +1197,7 @@ class DouYinNote(DouYinBaseUploader):
         await self.validate_upload_args()
         douyin_logger.info(_msg("🥳", "图文上传前检查通过"))
 
-        browser = await playwright.chromium.launch(headless=self.headless, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=self.headless, channel="chrome")
         context = await browser.new_context(
             storage_state=f"{self.account_file}",
             permissions=["geolocation"],

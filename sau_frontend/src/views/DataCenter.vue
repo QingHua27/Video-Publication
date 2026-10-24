@@ -1,6 +1,6 @@
 <template>
   <div class="data-center">
-    <div class="page-header">
+    <div class="page-header"><div class="page-kicker">WORKSPACE / ANALYTICS</div>
       <h1>数据中心</h1>
       <p class="subtitle">
         查看抖音 / 快手 / 小红书 / B站作品最近互动数据（每次同步最近 5 条）

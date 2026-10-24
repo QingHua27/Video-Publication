@@ -1,7 +1,7 @@
 <template>
   <div class="account-management">
-    <div class="page-header">
-      <h1>账号管理</h1>
+    <div class="page-header"><div class="page-kicker">WORKSPACE / ACCOUNTS</div>
+      <h1>账号管理</h1><p class="page-description">集中管理各平台账号与登录状态。</p>
     </div>
     
     <div class="account-tabs">
@@ -19,10 +19,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(null)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(null)" :loading="refreshingPlatform==='all'" :disabled="appStore.isAccountRefreshing && refreshingPlatform!=='all'"><el-icon v-if="refreshingPlatform!=='all'"><Refresh /></el-icon><span>刷新全部</span></el-button>
               </div>
             </div>
             
@@ -44,6 +41,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -59,9 +61,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -89,10 +92,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(4)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(4)" :loading="refreshingPlatform===4" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==4"><el-icon v-if="refreshingPlatform!==4"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[4] }}</span></el-button>
               </div>
             </div>
             
@@ -114,6 +114,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -129,9 +134,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -159,10 +165,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(3)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(3)" :loading="refreshingPlatform===3" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==3"><el-icon v-if="refreshingPlatform!==3"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[3] }}</span></el-button>
               </div>
             </div>
             
@@ -184,6 +187,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -199,9 +207,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -229,10 +238,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(2)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(2)" :loading="refreshingPlatform===2" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==2"><el-icon v-if="refreshingPlatform!==2"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[2] }}</span></el-button>
               </div>
             </div>
             
@@ -254,6 +260,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -269,9 +280,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -299,10 +311,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(1)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(1)" :loading="refreshingPlatform===1" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==1"><el-icon v-if="refreshingPlatform!==1"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[1] }}</span></el-button>
               </div>
             </div>
             
@@ -324,6 +333,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -339,9 +353,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -369,10 +384,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(5)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(5)" :loading="refreshingPlatform===5" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==5"><el-icon v-if="refreshingPlatform!==5"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[5] }}</span></el-button>
               </div>
             </div>
 
@@ -394,6 +406,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -409,9 +426,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -439,10 +457,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(6)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(6)" :loading="refreshingPlatform===6" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==6"><el-icon v-if="refreshingPlatform!==6"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[6] }}</span></el-button>
               </div>
             </div>
 
@@ -464,6 +479,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -479,9 +499,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -509,10 +530,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(7)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(7)" :loading="refreshingPlatform===7" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==7"><el-icon v-if="refreshingPlatform!==7"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[7] }}</span></el-button>
               </div>
             </div>
 
@@ -534,6 +552,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -549,9 +572,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -579,10 +603,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(8)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(8)" :loading="refreshingPlatform===8" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==8"><el-icon v-if="refreshingPlatform!==8"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[8] }}</span></el-button>
               </div>
             </div>
 
@@ -604,6 +625,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -619,9 +645,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -649,10 +676,7 @@
               />
               <div class="action-buttons">
                 <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
-                <el-button type="info" @click="fetchAccounts(9)" :loading="false">
-                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
-                  <span v-if="appStore.isAccountRefreshing">刷新中</span>
-                </el-button>
+                <el-button type="info" @click="fetchAccounts(9)" :loading="refreshingPlatform===9" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==9"><el-icon v-if="refreshingPlatform!==9"><Refresh /></el-icon><span>刷新{{ PLATFORM_LABEL_BY_TYPE[9] }}</span></el-button>
               </div>
             </div>
 
@@ -674,6 +698,11 @@
                     </el-tag>
                   </template>
                 </el-table-column>
+                <el-table-column label="刷新" width="110">
+                  <template #default="scope">
+                    <el-button size="small" text :aria-label="`刷新${scope.row.platform}账号`" :loading="refreshingPlatform===getPlatformTypeByLabel(scope.row.platform)" :disabled="appStore.isAccountRefreshing && refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)" @click="fetchAccounts(getPlatformTypeByLabel(scope.row.platform))"><el-icon v-if="refreshingPlatform!==getPlatformTypeByLabel(scope.row.platform)"><Refresh /></el-icon><span>刷新</span></el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column prop="status" label="状态">
                   <template #default="scope">
                     <el-tag
@@ -689,9 +718,10 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="470" class-name="account-operation-column">
                   <template #default="scope">
                     <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" :icon="Monitor" :loading="openingBackends[scope.row.id]" :title="scope.row.type===2 ? '视频号仅保留一个会话；使用后关闭后台再发布或检测' : '使用该账号保存的登录状态打开平台后台'" @click="handleOpenBackend(scope.row)">打开后台</el-button>
                     <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
                     <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
                     <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
@@ -747,7 +777,7 @@
         <!-- 二维码显示区域 -->
         <div v-if="sseConnecting" class="qrcode-container">
           <div v-if="qrCodeData && !loginStatus" class="qrcode-wrapper">
-            <p class="qrcode-tip">请使用对应平台APP扫描二维码登录</p>
+            <p class="qrcode-tip">{{ accountForm.platform === 'B站' ? '请使用哔哩哔哩 App 扫一扫，扫码后在手机上确认登录' : '请使用对应平台APP扫描二维码登录' }}</p>
             <img :src="qrCodeData" alt="登录二维码" class="qrcode-image" />
           </div>
           <div v-else-if="isManualLogin && !loginStatus" class="loading-wrapper">
@@ -764,7 +794,7 @@
           </div>
           <div v-else-if="loginStatus === '500'" class="error-wrapper">
             <el-icon><CircleCloseFilled /></el-icon>
-            <span>添加失败，请稍后再试</span>
+            <span>登录失败或二维码已过期，请重新获取</span>
           </div>
         </div>
       </el-form>
@@ -801,6 +831,19 @@ const appStore = useAppStore()
 
 // 当前激活的标签页
 const activeTab = ref('all')
+const openingBackends=reactive({})
+const handleOpenBackend=async account=>{
+ if(openingBackends[account.id])return
+ openingBackends[account.id]=true
+ try{
+  const result=await accountApi.openBackend(account.id)
+  ElMessage.success(result.data?.message || '后台已打开')
+ }catch(error){
+  if(error?.response?.status===404 || error?.code==='ERR_NETWORK')ElMessage.warning('无法连接打开后台接口，请确认账号仍存在；旧版后台需等待任务结束后重启软件')
+  else ElMessage.warning(error?.response?.data?.msg || '打开后台失败，请稍后重试')
+ }finally{openingBackends[account.id]=false}
+}
+
 
 // Tab name -> 后端 platform type
 const TAB_PLATFORM_TYPE = {
@@ -838,6 +881,8 @@ const getPlatformTypeByLabel = (platformLabel) => {
 
 // 搜索关键词
 const searchKeyword = ref('')
+const refreshingPlatform = ref(null)
+const refreshablePlatforms = computed(()=>Object.entries(PLATFORM_LABEL_BY_TYPE).map(([type,name])=>({type:Number(type),name,count:accountStore.accounts.filter(account=>account.platform===name).length})).filter(platform=>platform.count))
 
 // 获取账号数据（快速，不验证，使用数据库中已有状态）
 const fetchAccountsQuick = async () => {
@@ -856,6 +901,7 @@ const fetchAccountsQuick = async () => {
 const fetchAccounts = async (platformType = null) => {
   if (appStore.isAccountRefreshing) return
 
+  refreshingPlatform.value = platformType == null ? 'all' : platformType
   appStore.setAccountRefreshing(true)
 
   const platformLabel = platformType == null ? '全部' : (PLATFORM_LABEL_BY_TYPE[platformType] || '平台')
@@ -880,6 +926,7 @@ const fetchAccounts = async (platformType = null) => {
     ElMessage.error('获取账号数据失败')
   } finally {
     appStore.setAccountRefreshing(false)
+    refreshingPlatform.value = null
   }
 }
 
@@ -1204,6 +1251,7 @@ const connectSSE = (platform, name) => {
   sseConnecting.value = true
   qrCodeData.value = ''
   loginStatus.value = ''
+  isManualLogin.value = false
 
   // 防呆：长时间收不到后端任何消息时自动结束，避免一直停留在"请求中"
   qrWaitTimer = setTimeout(() => {
@@ -1251,9 +1299,7 @@ const connectSSE = (platform, name) => {
       isManualLogin.value = true
       // 提示信息根据平台区分
       const platform = accountForm.platform
-      if (platform === 'B站') {
-        ElMessage({ message: '已打开终端窗口，请在终端中扫码登录Bilibili，登录完成后会自动继续', type: 'info', duration: 10000 })
-      } else if (platform === '今日头条') {
+      if (platform === '今日头条') {
         ElMessage({ message: '已打开浏览器，请使用今日头条APP扫码登录，登录完成后系统将自动继续', type: 'info', duration: 10000 })
       } else if (platform === '搜狐') {
         ElMessage({ message: '已打开浏览器，请在搜狐号登录页完成登录，登录完成后系统将自动继续', type: 'info', duration: 10000 })
@@ -1267,8 +1313,9 @@ const connectSSE = (platform, name) => {
 
     // 视频号二维码可能是完整图片地址，而不是 base64 字符串
     const isImageUrl = data.startsWith('http://') || data.startsWith('https://')
-    if (!qrCodeData.value && (data.startsWith('data:image') || isImageUrl || data.length > 100)) {
+    if (data.startsWith('data:image') || isImageUrl || data.length > 100) {
       try {
+        isManualLogin.value = false
         if (data.startsWith('data:image')) {
           qrCodeData.value = data
         } else if (isImageUrl) {
@@ -1514,4 +1561,15 @@ onBeforeUnmount(() => {
     }
   }
 }
+</style>
+
+<style scoped>
+.platform-refresh-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 20px;padding:14px 16px;border:1px solid #e5e5e5;border-radius:6px;background:#fff}.platform-refresh-bar>span{font-size:12px;color:#888;margin-right:6px}.platform-refresh-bar .el-button{margin-left:0;gap:5px}.platform-refresh-bar small{margin-left:6px;color:#999}
+</style>
+
+<style scoped>
+.account-management :deep(.account-operation-column .cell){display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:visible;flex-wrap:nowrap}
+.account-management :deep(.account-operation-column .el-button){flex:0 0 auto;margin:0!important}
+.account-management :deep(.el-table){max-width:100%}
+.account-management .account-list{min-width:0;max-width:100%}
 </style>

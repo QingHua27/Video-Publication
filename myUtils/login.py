@@ -1,3 +1,4 @@
+from utils.channels_session import exclusive_channels
 import asyncio
 import sqlite3
 
@@ -116,6 +117,7 @@ async def douyin_cookie_gen(id,status_queue):
 
 
 # 视频号登录
+@exclusive_channels('扫码登录')
 async def get_tencent_cookie(id,status_queue):
     url_changed_event = asyncio.Event()
     async def on_url_change():
@@ -188,7 +190,7 @@ async def get_tencent_cookie(id,status_queue):
         cookies_dir = Path(BASE_DIR / "cookiesFile")
         cookies_dir.mkdir(exist_ok=True)
         await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
-        result = await check_cookie(2,f"{uuid_v1}.json")
+        result = "/platform/" in page.url
         if not result:
             status_queue.put("500")
             await page.close()
@@ -685,54 +687,40 @@ async def zhihu_cookie_gen(id, status_queue):
 
 # Bilibili登录（通过biliup CLI，在新终端窗口中扫码）
 async def bilibili_cookie_gen(id, status_queue):
-    import subprocess
-    import sys
+    from contextlib import closing
     from uploader.bilibili_uploader.runtime import ensure_biliup_binary
+    from utils.bilibili_web_login import collect_login_qrcode
 
     account_dir = Path(BASE_DIR / "cookiesFile")
     account_dir.mkdir(exist_ok=True)
-    account_file = account_dir / f"bilibili_{id}.json"
-
-    # 获取正确的biliup二进制路径（不是pip安装的Python版）
-    biliup_path = str(ensure_biliup_binary(force_check=False))
-
-    # 通知前端已打开终端，请手动登录
-    status_queue.put("MANUAL_LOGIN")
-
+    account_filename = f"bilibili_{uuid.uuid4().hex}.json"
+    account_file = account_dir / account_filename
     try:
-        # 在新终端窗口中运行 biliup login
-        if sys.platform == 'win32':
-            subprocess.Popen(
-                [biliup_path, '-u', str(account_file), 'login'],
-                creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
-        else:
-            subprocess.Popen(
-                ['x-terminal-emulator', '-e', biliup_path, '-u', str(account_file), 'login']
-            )
-        print(f"✅ 已打开终端窗口，请在终端中扫码登录Bilibili")
-    except Exception as e:
-        print(f"❌ 打开终端失败: {e}")
-        status_queue.put("500")
-        return
-
-    # 轮询等待cookie文件生成（用户在终端完成扫码后biliup会创建文件）
-    for _ in range(100):  # 最多等200秒
-        await asyncio.sleep(2)
-        if account_file.exists():
-            result = run_biliup_command(["-u", str(account_file), "renew"])
-            if result.returncode == 0:
-                print("✅ Bilibili登录成功")
-                with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
-                    conn.cursor().execute(
-                        'INSERT INTO user_info (type, filePath, userName, status) VALUES (?, ?, ?, ?)',
-                        (6, f"bilibili_{id}.json", id, 1))
-                    conn.commit()
-                status_queue.put("200")
-                return
-
-    print("❌ Bilibili登录超时")
-    status_queue.put("500")
+        binary = await asyncio.to_thread(ensure_biliup_binary, force_check=False)
+        success = await collect_login_qrcode(
+            binary, account_file, status_queue, BASE_DIR / '.tmp' / 'bilibili-login',
+        )
+        if not success:
+            print('❌ Bilibili登录未完成或二维码已过期，请重新获取')
+            status_queue.put('500')
+            return
+        result = await asyncio.to_thread(run_biliup_command, ['-u', str(account_file), 'renew'])
+        if result.returncode != 0:
+            status_queue.put('500')
+            return
+        with closing(sqlite3.connect(Path(BASE_DIR / 'db' / 'database.db'))) as conn:
+            existing = conn.execute('SELECT id FROM user_info WHERE type = ? AND userName = ?', (6, id)).fetchone()
+            if existing:
+                conn.execute('UPDATE user_info SET filePath = ?, status = 1 WHERE id = ?', (account_filename, existing[0]))
+            else:
+                conn.execute('INSERT INTO user_info (type, filePath, userName, status) VALUES (?, ?, ?, ?)',
+                             (6, account_filename, id, 1))
+            conn.commit()
+        print('✅ Bilibili登录成功')
+        status_queue.put('200')
+    except Exception as error:
+        print(f'❌ Bilibili登录失败: {type(error).__name__}')
+        status_queue.put('500')
 
 
 # a = asyncio.run(xiaohongshu_cookie_gen(4,None))

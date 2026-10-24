@@ -1,3 +1,4 @@
+from utils.channels_session import exclusive_channels
 import asyncio
 import configparser
 import os
@@ -40,6 +41,7 @@ async def cookie_auth_douyin(account_file):
             return False
 
 
+@exclusive_channels('检测登录')
 async def cookie_auth_tencent(account_file):
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
@@ -55,6 +57,7 @@ async def cookie_auth_tencent(account_file):
             return False
         except:
             tencent_logger.success("[+] cookie 有效")
+            await context.storage_state(path=account_file)
             return True
 
 

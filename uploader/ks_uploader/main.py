@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from utils.early_video_cover import prepare_video_and_cover, cover_entry_available
+from utils.upload_progress import report_upload_wait
+from utils.publish_jobs import report_stage
+from utils.publish_windows import launch_browser
 
 import asyncio
 import inspect
@@ -153,9 +157,9 @@ async def _is_ks_login_page_gone(page: Page) -> bool:
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
         if LOCAL_CHROME_PATH:
-            browser = await playwright.chromium.launch(headless=True, executable_path=LOCAL_CHROME_PATH)
+            browser = await launch_browser(playwright.chromium, headless=True, executable_path=LOCAL_CHROME_PATH)
         else:
-            browser = await playwright.chromium.launch(headless=True, channel="chrome")
+            browser = await launch_browser(playwright.chromium, headless=True, channel="chrome")
         try:
             context = await browser.new_context(storage_state=account_file)
             context = await set_init_script(context)
@@ -200,9 +204,9 @@ async def get_ks_cookie(
 
     async with async_playwright() as playwright:
         if LOCAL_CHROME_PATH:
-            browser = await playwright.chromium.launch(headless=headless, executable_path=LOCAL_CHROME_PATH)
+            browser = await launch_browser(playwright.chromium, headless=headless, executable_path=LOCAL_CHROME_PATH)
         else:
-            browser = await playwright.chromium.launch(headless=headless, channel="chrome")
+            browser = await launch_browser(playwright.chromium, headless=headless, channel="chrome")
         context = await browser.new_context()
         context = await set_init_script(context)
         qrcode_path = None
@@ -702,11 +706,14 @@ class KSVideo(KSBaseUploader):
         if not self.thumbnail_path:
             return
 
+        report_stage('设置封面（视频可继续上传）',35)
         kuaishou_logger.info(_msg("🖼️", "小人准备设置封面"))
 
         cover_label = page.locator("span").filter(has_text="封面设置")
         await cover_label.wait_for(state="visible", timeout=30000)
-        await cover_label.locator("xpath=../following-sibling::div[1]").locator('div').nth(0).click()
+        preview=cover_label.locator("xpath=../following-sibling::div[1]").locator('div').nth(0)
+        previous=await preview.locator('img').first.get_attribute('src') if await preview.locator('img').count() else ''
+        await preview.click()
 
         modal = page.locator('div[role="document"].ant-modal')
         await modal.wait_for(state="visible", timeout=30000)
@@ -715,17 +722,59 @@ class KSVideo(KSBaseUploader):
         await upload_cover_tab.wait_for(state="visible", timeout=10000)
         await upload_cover_tab.click()
 
-        file_input = modal.locator('input[type="file"]')
-        await file_input.wait_for(state="attached", timeout=30000)
-        await file_input.set_input_files(self.thumbnail_path)
-        await asyncio.sleep(1)
+        from utils.ks_covers import select_cover_file
+        try:
+            modern=await select_cover_file(page,modal,self.thumbnail_path)
+            if modern:
+                await modal.get_by_text("清空上传",exact=True).wait_for(state="visible",timeout=30000)
+        except Exception as error:
+            from utils.publish_diagnostics import capture_editor_failure
+            await capture_editor_failure(page,'kuaishou','cover-file')
+            raise RuntimeError('快手封面图片选择失败，尚未发布，请检查封面编辑窗口') from error
+        await asyncio.sleep(5)
 
-        confirm_button = modal.get_by_role("button", name="确认", exact=True)
-        await confirm_button.wait_for(state="visible", timeout=10000)
-        await confirm_button.click()
+        from utils.cover_confirmation import finish_cover_dialog
+        await finish_cover_dialog(page,modal,'快手',('确认',))
+        for _ in range(60):
+            images=await preview.locator('img').evaluate_all("nodes=>nodes.map(img=>({src:img.getAttribute('src'),ready:img.complete && img.naturalWidth>0}))")
+            if any(image['ready'] and image['src'] and image['src']!=previous for image in images):
+                kuaishou_logger.success(_msg("🥳", "封面已经设置完成并更新预览"))
+                return
+            await asyncio.sleep(.5)
+        from utils.publish_diagnostics import capture_editor_failure
+        await capture_editor_failure(page,'kuaishou','cover-not-updated')
+        raise RuntimeError('快手封面已确认，但尚未核实预览更新，已停止发布')
 
-        await modal.wait_for(state="hidden", timeout=30000)
-        kuaishou_logger.success(_msg("🥳", "封面已经设置完成"))
+    async def cover_entry_ready(self,page):
+        # Fast upload metadata can reset the open cover editor back to frame
+        # extraction. Require the actual preview to be initialized first.
+        entries=page.get_by_text('重新上传',exact=True)
+        if not any([await entries.nth(i).is_visible() for i in range(await entries.count())]):return False
+        uploading=page.get_by_text(__import__('re').compile(r'^(?:视频)?(?:上传中|正在上传|转码中|处理中)'))
+        if any([await uploading.nth(i).is_visible() for i in range(await uploading.count())]):return False
+        return await cover_entry_available(page,selectors=('span:has-text("封面设置")',))
+
+    async def wait_for_video_upload(self,page):
+        import re
+        stable=0
+        for _ in range(600):
+            # Creator-assistant detection (e.g. "检测中99%") is unrelated to
+            # video transfer. Do not sample its progress or use body-wide %.
+            await report_upload_wait(page,scope=page.locator('[class*="upload"]'))
+            failed=page.get_by_text(re.compile(r'^.*上传失败'))
+            if any([await failed.nth(i).is_visible() for i in range(await failed.count())]):
+                raise RuntimeError('快手视频上传失败，未执行发布')
+            uploading=page.get_by_text(re.compile(r'^(?:视频)?(?:上传中|正在上传|转码中|处理中)'))
+            busy=any([await uploading.nth(i).is_visible() for i in range(await uploading.count())])
+            completed=page.get_by_text('重新上传',exact=True)
+            ready=any([await completed.nth(i).is_visible() for i in range(await completed.count())])
+            ready=ready and await page.locator('video').count()>0
+            stable=stable+1 if ready and not busy else 0
+            if stable>=3:return
+            await asyncio.sleep(1)
+        from utils.publish_diagnostics import capture_editor_failure
+        await capture_editor_failure(page,'kuaishou','upload-timeout')
+        raise RuntimeError('快手视频上传超时，未执行发布')
 
     async def upload(self, playwright: Playwright) -> None:
         kuaishou_logger.info(_msg("🧍", "小人先检查 cookie、视频文件、封面和发布时间"))
@@ -733,12 +782,12 @@ class KSVideo(KSBaseUploader):
         kuaishou_logger.info(_msg("🥳", "上传前检查通过"))
 
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(
+            browser = await launch_browser(playwright.chromium,
                 headless=self.headless,
                 executable_path=self.local_executable_path,
             )
         else:
-            browser = await playwright.chromium.launch(
+            browser = await launch_browser(playwright.chromium,
                 headless=self.headless,
                 channel="chrome",
             )
@@ -785,34 +834,25 @@ class KSVideo(KSBaseUploader):
 
             await self.fill_tags(page)
 
-            max_retries = 60
-            retry_count = 0
-            while retry_count < max_retries:
-                try:
-                    number = await page.locator("text=上传中").count()
-                    if number == 0:
-                        kuaishou_logger.success(_msg("🥳", "视频已经传完啦"))
-                        break
-
-                    if retry_count % 5 == 0:
-                        kuaishou_logger.info(_msg("🏃", "小人正在努力上传视频"))
-
-                    if await page.locator("text=上传失败").count():
-                        await self.handle_upload_error(page)
-
-                    await asyncio.sleep(2)
-                except Exception as exc:
-                    kuaishou_logger.warning(_msg("😵", f"检查上传状态时出错，小人继续重试: {exc}"))
-                    await asyncio.sleep(2)
-                retry_count += 1
-
-            if retry_count == max_retries:
-                kuaishou_logger.warning(_msg("😵", "超过最大重试次数，视频上传可能未完成"))
-
-            await self.set_thumbnail(page)
+            await prepare_video_and_cover(
+                lambda:self.wait_for_video_upload(page),
+                lambda:self.cover_entry_ready(page),
+                lambda:self.set_thumbnail(page),required=bool(self.thumbnail_path))
 
             # 作者声明：内容为AI生成（下拉，无弹窗）
             await self.set_ai_generated_declaration(page)
+
+            # Video publication and collection membership have separate outcomes.
+            collection_task_id = None
+            if getattr(self, 'collection_name', '') and not self.dry_run:
+                from utils import ks_collection_tasks
+                from utils.publish_jobs import current_job_id
+                import time
+                collection_id, baseline = await ks_collection_tasks.prepare(context, self.collection_name)
+                collection_task_id = ks_collection_tasks.create(
+                    current_job_id(), self.account_file, self.collection_name, collection_id,
+                    self.title, baseline, time.time(), time.time())
+
 
             if self.publish_strategy == KUAISHOU_PUBLISH_STRATEGY_SCHEDULED and self.publish_date != 0:
                 await self.set_schedule_time(page, self.publish_date)
@@ -820,6 +860,7 @@ class KSVideo(KSBaseUploader):
             max_publish_retries = 600
             publish_retry_count = 0
             verification_waited = False
+            publish_clicked = False
 
             if self.dry_run:
                 kuaishou_logger.warning(_msg("🛑", "【仅预览不发布】已跳过点击发布按钮"))
@@ -867,14 +908,18 @@ class KSVideo(KSBaseUploader):
                                     if not still_has:
                                         kuaishou_logger.success(_msg("✅", "验证已完成，继续发布流程"))
                                         verification_waited = True
+                                        publish_clicked = False
                                         break
                                     if wait_i % 20 == 0 and wait_i > 0:
                                         kuaishou_logger.info(_msg("⏳", f"仍在等待验证完成...已等待{wait_i // 2}秒"))
                                 else:
                                     verification_waited = True
 
-                        clicked = await self._click_publish_button(page)
-                        if not clicked and publish_retry_count % 20 == 0:
+                        clicked = False
+                        if not publish_clicked:
+                            clicked = await self._click_publish_button(page)
+                            publish_clicked = clicked
+                        if not publish_clicked and publish_retry_count % 20 == 0:
                             kuaishou_logger.warning(
                                 _msg("⚠️", f"未找到可点击的「发布」按钮（第{publish_retry_count}次）")
                             )
@@ -891,9 +936,16 @@ class KSVideo(KSBaseUploader):
                             await page.screenshot(full_page=True)
                         await asyncio.sleep(1)
                 else:
-                    kuaishou_logger.error(_msg("❌", f"发布超时：{max_publish_retries}次尝试后仍未成功"))
+                    raise RuntimeError("快手未确认发布成功，请先到平台核对，勿重复提交")
 
                 upload_success = True
+                if collection_task_id:
+                    # No exception from collection work may turn a submitted video into a failed upload.
+                    try:
+                        ks_collection_tasks.update(collection_task_id, submitted=time.time(), status='waiting', message='视频已提交，等待加入合集')
+                        ks_collection_tasks.start(collection_task_id)
+                    except Exception:
+                        kuaishou_logger.error('视频已提交，但合集任务启动失败，请到快手核对合集；请勿重新上传')
         finally:
             if upload_success:
                 await context.storage_state(path=self.account_file)
@@ -1078,12 +1130,12 @@ class KSNote(KSBaseUploader):
         kuaishou_logger.info(_msg("🥳", "图文上传前检查通过"))
 
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(
+            browser = await launch_browser(playwright.chromium,
                 headless=self.headless,
                 executable_path=self.local_executable_path,
             )
         else:
-            browser = await playwright.chromium.launch(
+            browser = await launch_browser(playwright.chromium,
                 headless=self.headless,
                 channel="chrome",
             )

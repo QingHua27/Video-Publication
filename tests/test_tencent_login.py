@@ -55,6 +55,12 @@ class _FakePage:
     def locator(self, selector):
         return self.frame
 
+    async def wait_for_url(self,pattern,**kwargs):
+        self.url="https://channels.weixin.qq.com/platform/home"
+
+    async def wait_for_timeout(self,milliseconds):
+        pass
+
     async def close(self):
         pass
 

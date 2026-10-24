@@ -1,13 +1,13 @@
 <template>
   <div class="dashboard">
-    <div class="page-header">
-      <h1>自媒体自动化运营系统</h1>
+    <div class="page-header"><div class="page-kicker">OVERVIEW / WORKSPACE</div>
+      <h1>工作空间</h1><p class="page-description">查看账号状态、素材与常用操作。</p>
     </div>
 
     <div class="dashboard-content">
       <el-row :gutter="20">
         <!-- 账号统计卡片 -->
-        <el-col :span="8">
+        <el-col :xs="24" :sm="12" :lg="8">
           <el-card class="stat-card">
             <div class="stat-card-content">
               <div class="stat-icon">
@@ -28,7 +28,7 @@
         </el-col>
 
         <!-- 平台统计卡片 -->
-        <el-col :span="8">
+        <el-col :xs="24" :sm="12" :lg="8">
           <el-card class="stat-card">
             <div class="stat-card-content">
               <div class="stat-icon platform-icon">
@@ -55,7 +55,7 @@
         </el-col>
 
         <!-- 素材统计卡片 -->
-        <el-col :span="8">
+        <el-col :xs="24" :sm="12" :lg="8">
           <el-card class="stat-card">
             <div class="stat-card-content">
               <div class="stat-icon content-icon">
@@ -81,7 +81,7 @@
       <div class="quick-actions">
         <h2>快捷操作</h2>
         <el-row :gutter="20">
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :lg="6">
             <el-card class="action-card" @click="navigateTo('/account-management')">
               <div class="action-icon">
                 <el-icon><UserFilled /></el-icon>
@@ -90,7 +90,7 @@
               <div class="action-desc">管理所有平台账号</div>
             </el-card>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :lg="6">
             <el-card class="action-card" @click="navigateTo('/material-management')">
               <div class="action-icon">
                 <el-icon><Upload /></el-icon>
@@ -99,7 +99,7 @@
               <div class="action-desc">上传和管理视频素材</div>
             </el-card>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :lg="6">
             <el-card class="action-card" @click="navigateTo('/publish-center')">
               <div class="action-icon">
                 <el-icon><Timer /></el-icon>
@@ -108,7 +108,7 @@
               <div class="action-desc">发布内容到各平台</div>
             </el-card>
           </el-col>
-          <el-col :span="6">
+          <el-col :xs="12" :sm="12" :lg="6">
             <el-card class="action-card" @click="navigateTo('/about')">
               <div class="action-icon">
                 <el-icon><DataAnalysis /></el-icon>

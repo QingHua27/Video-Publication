@@ -5,13 +5,22 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
 from flask_cors import CORS
 from myUtils.auth import check_cookie
-from flask import Flask, request, jsonify, Response, render_template, send_from_directory
+from flask import Flask, request, jsonify, Response, render_template, send_from_directory, send_file
 from conf import BASE_DIR
+from utils.publish_collections import validate_collection, CollectionSelectionError
+from utils.publish_jobs import create_job, update_job, read_job, claim_job, list_jobs, record_preflight
+from utils import publish_history
+from utils.collection_catalog import discover_collections, CollectionCatalogError
+from utils.material_classification import classify_material
+from utils.local_materials import database as material_database, register_files, create_section, list_sections, list_materials, move_folders, pick_files, delete_folder_records, link_directory, sync_directories, list_directories, exclude_directory_records
+from utils.local_exit import request_local_exit
+from urllib.parse import urlsplit
 from myUtils.login import get_tencent_cookie, douyin_cookie_gen, get_ks_cookie, xiaohongshu_cookie_gen, baijiahao_cookie_gen, bilibili_cookie_gen, toutiao_cookie_gen, sohu_cookie_gen, zhihu_cookie_gen
 from myUtils.postVideo import post_video_tencent, post_video_DouYin, post_video_ks, post_video_xhs, post_video_baijiahao, post_video_bilibili, post_video_toutiao, post_article_toutiao, post_article_baijiahao, post_article_sohu, post_article_zhihu
 from uploader.douyin_uploader.content_stats import (
@@ -67,6 +76,9 @@ def _dingtalk_push_covers() -> bool:
 
 active_queues = {}
 app = Flask(__name__)
+_collection_cache = {}
+_collection_cache_lock = threading.Lock()
+_collection_workers = threading.BoundedSemaphore(2)
 
 
 def _db_path():
@@ -94,10 +106,40 @@ def _load_stats_payload(conn, platform: str, account_id: int):
     return {"items": [_row_to_stat_item(r) for r in rows], "lastSyncedAt": last}
 
 #允许所有来源跨域访问
-CORS(app)
+TRUSTED_LOCAL_ORIGINS = [f'http://{host}:{port}' for host in ('localhost','127.0.0.1','[::1]') for port in (5173,5409)]
+CORS(app, origins=TRUSTED_LOCAL_ORIGINS)
 
-# 限制上传文件大小为160MB
-app.config['MAX_CONTENT_LENGTH'] = 160 * 1024 * 1024
+@app.route('/local/status', methods=['GET'])
+def local_status():
+    return jsonify({'code':200,'data':{'running':True}})
+
+
+@app.route('/local/exit', methods=['POST'])
+def local_exit():
+    origin=request.headers.get('Origin')
+    allowed_origin=True
+    if origin:
+        try:
+            parsed=urlsplit(origin)
+            allowed_origin=parsed.scheme=='http' and parsed.hostname in ('localhost','127.0.0.1','::1') and parsed.port in (5173,5409)
+        except ValueError:
+            allowed_origin=False
+    if request.remote_addr not in ('127.0.0.1','::1') or request.headers.get('X-OmniPost-Exit')!='1' or not request.is_json or not allowed_origin:
+        return jsonify({'code':403,'msg':'只能从本机管理台执行退出'}),403
+    try:
+        request_local_exit(BASE_DIR)
+    except (RuntimeError,OSError) as error:
+        return jsonify({'code':409,'msg':str(error)}),409
+    return jsonify({'code':200,'data':{'stopping':True},'msg':'正在停止本机服务'})
+
+# Local video uploads are spooled to disk by Werkzeug and saved as streams.
+# A global 160MB request cap incorrectly rejected normal video materials.
+app.config['MAX_CONTENT_LENGTH'] = None
+
+
+@app.errorhandler(413)
+def upload_too_large(error):
+    return jsonify({'code':413,'data':None,'msg':'上传请求超过当前服务限制，请检查上传配置或减少表单大小'}),413
 
 # 获取当前目录（假设 index.html 和 assets 在这里）
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -140,11 +182,36 @@ def upload_file():
         # 保存文件到指定位置
         uuid_v1 = uuid.uuid1()
         print(f"UUID v1: {uuid_v1}")
+        (BASE_DIR / "videoFile").mkdir(parents=True, exist_ok=True)
         filepath = Path(BASE_DIR / "videoFile" / f"{uuid_v1}_{file.filename}")
         file.save(filepath)
         return jsonify({"code":200,"msg": "File uploaded successfully", "data": f"{uuid_v1}_{file.filename}"}), 200
     except Exception as e:
         return jsonify({"code":500,"msg": str(e),"data":None}), 500
+
+def local_material_read_allowed():
+    if request.remote_addr not in ('127.0.0.1','::1'):return False
+    origin=request.headers.get('Origin')
+    if origin:return origin in TRUSTED_LOCAL_ORIGINS
+    referer=request.headers.get('Referer')
+    if referer:
+        try:
+            url=urlsplit(referer)
+            return f'{url.scheme}://{url.netloc}' in TRUSTED_LOCAL_ORIGINS
+        except ValueError:return False
+    return request.headers.get('Sec-Fetch-Site') not in ('cross-site','same-site')
+
+@app.before_request
+def protect_local_material_reads():
+    if request.path in ('/getFiles','/getFile','/materialSections','/deleteFile') and request.method=='GET' and not local_material_read_allowed():
+        return jsonify({'code':403,'msg':'请从本机管理台访问素材'}),403
+
+@app.after_request
+def sandbox_material_response(response):
+    if request.path=='/getFile':
+        response.headers['Content-Security-Policy']="sandbox; default-src 'none'"
+        response.headers['X-Content-Type-Options']='nosniff'
+    return response
 
 @app.route('/getFile', methods=['GET'])
 def get_file():
@@ -153,6 +220,14 @@ def get_file():
 
     if not filename:
         return jsonify({"code": 400, "msg": "filename is required", "data": None}), 400
+
+    if Path(filename).is_absolute():
+        filename=str(Path(filename).resolve())
+        with material_database(BASE_DIR) as db:
+            registered=db.execute("SELECT filename FROM file_records WHERE file_path=? COLLATE NOCASE AND source_kind='reference'",(filename,)).fetchone()
+        if not registered:return jsonify({'code':403,'msg':'此路径未登记为素材'}),403
+        if not Path(filename).is_file():return jsonify({'code':404,'msg':'原文件已移动或删除，路径失效'}),404
+        return send_file(filename,conditional=True,as_attachment=request.args.get('download')=='1' or Path(filename).suffix.lower() not in ('.mp4','.webm','.mov','.jpg','.jpeg','.png','.gif','.webp','.avif'),download_name=registered['filename'])
 
     # 防止路径穿越攻击
     if '..' in filename or filename.startswith('/'):
@@ -167,104 +242,124 @@ def get_file():
 
 @app.route('/uploadSave', methods=['POST'])
 def upload_save():
-    if 'file' not in request.files:
-        return jsonify({
-            "code": 400,
-            "data": None,
-            "msg": "No file part in the request"
-        }), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({
-            "code": 400,
-            "data": None,
-            "msg": "No selected file"
-        }), 400
-
-    # 获取表单中的自定义文件名（可选）
-    custom_filename = request.form.get('filename', None)
-    if custom_filename:
-        filename = custom_filename + "." + file.filename.split('.')[-1]
-    else:
-        filename = file.filename
-
-    try:
-        # 生成 UUID v1
-        uuid_v1 = uuid.uuid1()
-        print(f"UUID v1: {uuid_v1}")
-
-        # 构造文件名和路径
-        final_filename = f"{uuid_v1}_{filename}"
-        filepath = Path(BASE_DIR / "videoFile" / f"{uuid_v1}_{filename}")
-
-        # 保存文件
-        file.save(filepath)
-
-        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                                INSERT INTO file_records (filename, filesize, file_path)
-            VALUES (?, ?, ?)
-                                ''', (filename, round(float(os.path.getsize(filepath)) / (1024 * 1024),2), final_filename))
-            conn.commit()
-            print("✅ 上传文件已记录")
-
-        return jsonify({
-            "code": 200,
-            "msg": "File uploaded and saved successfully",
-            "data": {
-                "filename": filename,
-                "filepath": final_filename
-            }
-        }), 200
-
-    except Exception as e:
-        print(f"Upload failed: {e}")
-        return jsonify({
-            "code": 500,
-            "msg": f"upload failed: {e}",
-            "data": None
-        }), 500
+    return jsonify({'code':410,'msg':'素材库现仅登记本地路径，请使用“添加本地素材”'}),410
 
 @app.route('/getFiles', methods=['GET'])
 def get_all_files():
     try:
-        # 使用 with 自动管理数据库连接
-        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
-            conn.row_factory = sqlite3.Row  # 允许通过列名访问结果
-            cursor = conn.cursor()
+        directories=sync_directories(BASE_DIR)
+        return jsonify({'code':200,'data':list_materials(BASE_DIR),'directories':directories})
+    except Exception:
+        return jsonify({'code':500,'msg':'读取素材失败，请检查数据库和文件路径'}),500
 
-            # 查询所有记录
-            cursor.execute("SELECT * FROM file_records")
-            rows = cursor.fetchall()
-            
-            # 将结果转为字典列表，并提取UUID
-            data = []
-            for row in rows:
-                row_dict = dict(row)
-                # 从 file_path 中提取 UUID (文件名的第一部分，下划线前)
-                if row_dict.get('file_path'):
-                    file_path_parts = row_dict['file_path'].split('_', 1)  # 只分割第一个下划线
-                    if len(file_path_parts) > 0:
-                        row_dict['uuid'] = file_path_parts[0]  # UUID 部分
-                    else:
-                        row_dict['uuid'] = ''
-                else:
-                    row_dict['uuid'] = ''
-                data.append(row_dict)
 
-            return jsonify({
-                "code": 200,
-                "msg": "success",
-                "data": data
-            }), 200
-    except Exception as e:
-        return jsonify({
-            "code": 500,
-            "msg": str("get file failed!"),
-            "data": None
-        }), 500
+def local_material_action_allowed():
+    origin=request.headers.get('Origin')
+    if request.remote_addr not in ('127.0.0.1','::1') or request.headers.get('X-OmniPost-Local')!='1' or not request.is_json:return False
+    if not origin:return True
+    try:
+        url=urlsplit(origin)
+        return url.scheme=='http' and url.hostname in ('localhost','127.0.0.1','::1') and url.port in (5173,5409)
+    except ValueError:return False
+
+
+@app.route('/materialSections', methods=['GET','POST'])
+def material_sections():
+    if request.method=='GET':return jsonify({'code':200,'data':list_sections(BASE_DIR)})
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    try:
+        section=create_section(BASE_DIR,(request.get_json() or {}).get('name'))
+        return jsonify({'code':200,'data':{'id':section}})
+    except ValueError as error:return jsonify({'code':400,'msg':str(error)}),400
+
+
+@app.route('/materialSections/delete',methods=['POST'])
+def delete_material_section():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    from utils.local_materials import delete_section
+    try:
+        data=request.get_json(silent=True) or {}
+        if not isinstance(data,dict) or type(data.get('sectionId')) is not int:raise ValueError('请选择有效分区')
+        count=delete_section(BASE_DIR,data['sectionId'])
+        return jsonify({'code':200,'data':{'moved':count},'msg':'分区已删除，素材已移至未分区'})
+    except ValueError as error:return jsonify({'code':400,'msg':str(error)}),400
+
+
+@app.route('/materialSections/move', methods=['POST'])
+def move_material_folders():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    data=request.get_json() or {}
+    try:
+        count=move_folders(BASE_DIR,data.get('sourceSectionId'),data.get('targetSectionId'),data.get('folders'),data.get('allowMerge') is True)
+        return jsonify({'code':200,'data':{'moved':count}})
+    except ValueError as error:return jsonify({'code':409,'msg':str(error)}),409
+
+
+@app.route('/local/materials/delete-folders', methods=['POST'])
+def delete_material_folder_records():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    data=request.get_json() or {}
+    try:
+        count=delete_folder_records(BASE_DIR,data.get('sectionId'),data.get('folders'),data.get('ids'))
+        return jsonify({'code':200,'data':{'deleted':count}})
+    except ValueError as error:return jsonify({'code':409,'msg':str(error)}),409
+
+
+@app.route('/local/materials/reveal', methods=['POST'])
+def reveal_local_material():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    try:
+        raw=(request.get_json() or {}).get('path')
+        if not isinstance(raw,str) or not raw:raise ValueError('请选择素材文件')
+        path=Path(raw)
+        if path.is_absolute():
+            path=path.resolve()
+            with material_database(BASE_DIR) as db:
+                registered=db.execute("SELECT id FROM file_records WHERE file_path=? COLLATE NOCASE AND source_kind='reference'",(str(path),)).fetchone()
+            if not registered:raise ValueError('此路径未登记为素材')
+        else:
+            storage=(Path(BASE_DIR)/'videoFile').resolve()
+            path=(storage/path).resolve()
+            if not path.is_relative_to(storage):raise ValueError('非法素材路径')
+        if path.suffix.lower() not in ('.mp4','.mov','.avi','.mkv','.webm','.m4v','.flv','.wmv','.png','.jpg','.jpeg','.webp','.gif','.avif'):raise ValueError('仅支持打开视频和封面所在文件夹')
+        if not path.is_file():raise ValueError('素材文件已移动或删除')
+        import subprocess
+        subprocess.Popen(['explorer.exe','/select,',str(path)])
+        return jsonify({'code':200,'msg':'已打开素材所在文件夹'})
+    except ValueError as error:return jsonify({'code':400,'msg':str(error)}),400
+    except OSError:return jsonify({'code':500,'msg':'打开文件夹失败，请复制路径手动打开'}),500
+
+
+@app.route('/local/materials/pick', methods=['POST'])
+def pick_local_materials():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台选择文件'}),403
+    try:return jsonify({'code':200,'data':pick_files(BASE_DIR,(request.get_json() or {}).get('kind','all'))})
+    except (ValueError,RuntimeError) as error:return jsonify({'code':400,'msg':str(error)}),400
+    except Exception:return jsonify({'code':500,'msg':'本机文件窗口未能返回，请重试'}),500
+
+
+@app.route('/local/materials/directories', methods=['GET','POST'])
+def material_directory_links():
+    if request.method=='GET':
+        if not local_material_read_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+        return jsonify({'code':200,'data':list_directories(BASE_DIR)})
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    data=request.get_json() or {}
+    try:
+        directories=link_directory(BASE_DIR,data.get('path'),data.get('sectionId'),data.get('kind','all'))
+        directory=next((item for item in directories if item['path'].casefold()==str(Path(data['path']).resolve()).casefold() and item['section_id']==int(data['sectionId'])),None)
+        return jsonify({'code':200,'data':{'directory':directory,'directories':directories,'files':list_materials(BASE_DIR)}})
+    except (ValueError,OSError) as error:return jsonify({'code':400,'msg':str(error)}),400
+
+
+@app.route('/local/materials/register', methods=['POST'])
+def register_local_materials():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台添加素材'}),403
+    data=request.get_json() or {}
+    try:
+        ids=register_files(BASE_DIR,data.get('paths'),data.get('sectionId'))
+        return jsonify({'code':200,'data':{'ids':ids,'files':[file for file in list_materials(BASE_DIR) if file['id'] in ids]}})
+    except (ValueError,OSError) as error:return jsonify({'code':400,'msg':str(error)}),400
 
 
 @app.route("/getAccounts", methods=['GET'])
@@ -298,6 +393,24 @@ def getAccounts():
         }), 500
 
 
+@app.route('/account/openBackend',methods=['POST'])
+def account_open_backend():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台打开后台'}),403
+    from utils.account_backend import open_backend
+    from utils.channels_session import SessionBusy
+    try:
+        data=request.get_json(silent=True) or {}
+        account_id=data.get('accountId')
+        if type(account_id) is not int:raise ValueError('账号参数无效')
+        with closing(sqlite3.connect(_db_path())) as db:
+            row=db.execute('SELECT type,filePath FROM user_info WHERE id=?',(account_id,)).fetchone()
+        if not row:return jsonify({'code':404,'msg':'账号不存在'}),404
+        return jsonify({'code':200,'data':open_backend(BASE_DIR,account_id,*row)})
+    except SessionBusy as error:return jsonify({'code':409,'msg':str(error)}),409
+    except ValueError as error:return jsonify({'code':400,'msg':str(error)}),400
+    except Exception as error:return jsonify({'code':503,'msg':str(error)}),503
+
+
 @app.route("/getValidAccounts",methods=['GET'])
 async def getValidAccounts():
     platform_type = request.args.get('type')
@@ -324,7 +437,10 @@ async def getValidAccounts():
         for row in rows:
             print(row)
         for row in rows_list:
-            flag = await check_cookie(row[1],row[2])
+            from utils.channels_session import SessionBusy
+            try:flag = await check_cookie(row[1],row[2])
+            except SessionBusy:
+                continue  # Busy is not an invalid login; preserve the previous status.
             new_status = 1 if flag else 0
             row[4] = new_status
             cursor.execute('''
@@ -353,8 +469,9 @@ def delete_file():
         }), 400
 
     try:
+        with material_database(BASE_DIR):pass
         # 获取数据库连接
-        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+        with closing(sqlite3.connect(Path(BASE_DIR / "db" / "database.db"))) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
@@ -371,19 +488,15 @@ def delete_file():
 
             record = dict(record)
 
-            # 获取文件路径并删除实际文件
-            file_path = Path(BASE_DIR / "videoFile" / record['file_path'])
-            if file_path.exists():
-                try:
-                    file_path.unlink()  # 删除文件
-                    print(f"✅ 实际文件已删除: {file_path}")
-                except Exception as e:
-                    print(f"⚠️ 删除实际文件失败: {e}")
-                    # 即使删除文件失败，也要继续删除数据库记录，避免数据不一致
-            else:
-                print(f"⚠️ 实际文件不存在: {file_path}")
+            # Referenced originals are never deleted. Only old app-owned copies may be removed.
+            if record.get('source_kind','copied') != 'reference':
+                storage=(BASE_DIR / 'videoFile').resolve()
+                file_path=(storage / record['file_path']).resolve()
+                if file_path.is_relative_to(storage) and file_path.is_file():
+                    file_path.unlink()
 
             # 删除数据库记录
+            exclude_directory_records(conn,[int(file_id)])
             cursor.execute("DELETE FROM file_records WHERE id = ?", (file_id,))
             conn.commit()
 
@@ -489,13 +602,52 @@ def login():
     response.headers['Connection'] = 'keep-alive'
     return response
 
+publish_browser_slot = threading.BoundedSemaphore(2)
+
+@app.route('/publishHistory', methods=['GET','POST'])
+def publication_history():
+    allowed=local_material_read_allowed() if request.method=='GET' else local_material_action_allowed()
+    if not allowed:return jsonify({'code':403,'msg':'请从本机管理台操作'}),403
+    try:
+        if request.method=='GET':
+            return jsonify({'code':200,'data':publish_history.list_records(BASE_DIR)})
+        data=request.get_json() or {}
+        if data.get('action')=='sync_bilibili':
+            from utils.bilibili_history_sync import sync_accounts
+            with closing(sqlite3.connect(_db_path())) as db:
+                accounts=db.execute('SELECT id,filePath FROM user_info WHERE type=6').fetchall()
+            result=sync_accounts(BASE_DIR,accounts,read_job,force=data.get('force') is True)
+            return jsonify({'code':200,'data':result})
+        if data.get('action')=='manual':
+            with closing(sqlite3.connect(_db_path())) as db:
+                account=db.execute('SELECT type,filePath FROM user_info WHERE id=?',(int(data.get('accountId')),)).fetchone()
+            if not account:raise ValueError('账号不存在')
+            files=data.get('fileList')
+            if not isinstance(files,list) or not files or len(files)>50 or any(not isinstance(x,str) or not x for x in files):
+                raise ValueError('请选择当前任务的视频素材后补记')
+            publish_history.reserve(BASE_DIR,account[0],[account[1]],files,data.get('title',''),'',manual=True)
+        else:
+            publish_history.reconcile(BASE_DIR,int(data.get('id')),data.get('status'),read_job)
+        return jsonify({'code':200,'msg':'发布记录已更新'})
+    except (ValueError,TypeError) as error:
+        return jsonify({'code':409,'msg':str(error)}),409
+
+@app.route('/publishPreflight',methods=['POST'])
+def publish_preflight_check():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'请从本机管理台检查发布素材'}),403
+    from utils.publish_preflight import preflight_publish
+    data=request.get_json(silent=True)
+    report=preflight_publish(BASE_DIR,data,manual=isinstance(data,dict) and data.get('manual') is True,job_reader=read_job)
+    return jsonify({'code':200,'data':report})
+
+
 @app.route('/postVideo', methods=['POST'])
 def postVideo():
     # 获取JSON数据
     data = request.get_json()
 
-    if not data:
-        return jsonify({"code": 400, "msg": "请求数据不能为空", "data": None}), 400
+    if not isinstance(data,dict) or not data:
+        return jsonify({"code": 400, "msg": "请求数据必须为非空对象", "data": None}), 400
 
     # 从JSON数据中提取fileList和accountList
     file_list = data.get('fileList', [])
@@ -567,6 +719,26 @@ def postVideo():
     is_sohu_article = (type == 8)
     is_zhihu_article = (type == 9)
 
+    try:
+        collection_name = validate_collection(type, data.get('collectionName', ''))
+    except CollectionSelectionError as error:
+        return jsonify({'code':400,'msg':str(error),'data':None}), 400
+    if collection_name and is_article:
+        return jsonify({'code':400,'msg':'合集目前仅用于视频发布，请切换视频或清空合集','data':None}), 400
+    # Match account cookies to this platform before any background task starts.
+    with closing(sqlite3.connect(_db_path())) as conn:
+        allowed_accounts = {row[0] for row in conn.execute('SELECT filePath FROM user_info WHERE type = ?', (type,))}
+    if not isinstance(account_list, list) or any(not isinstance(item, str) or item not in allowed_accounts for item in account_list):
+        return jsonify({'code':400,'msg':'发布账号与平台不匹配，请重新选择账号','data':None}), 400
+
+    if type==4 and collection_name:
+        with _collection_cache_lock:catalogs=list(_collection_cache.items())
+        for cache_key,(expiry,catalog) in catalogs:
+            if cache_key[1]!=4 or cache_key[2] not in account_list or expiry<=time.monotonic():continue
+            for item in catalog.get('items',[]):
+                if item.get('value')==collection_name and item.get('disabled') and item.get('unavailableReason'):
+                    return jsonify({'code':400,'msg':f'快手合集“{collection_name}”暂不可投稿：{item["unavailableReason"]}。请先在快手合集管理处理，或确认不加入合集后重新提交；本次未开始上传','data':None}),400
+
     # 参数校验
     if not is_article and not file_list:
         return jsonify({"code": 400, "msg": "文件列表不能为空", "data": None}), 400
@@ -619,7 +791,38 @@ def postVideo():
 
     # 参数校验通过后，在后台线程中执行发布任务，避免阻塞Flask主线程。
     # 前端拿到的 200 只表示“任务已提交”，不代表平台已经发布成功。
-    def run_publish_task():
+    import hashlib
+    digest=hashlib.sha256(json.dumps({key:value for key,value in data.items() if key!='requestId'},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    metadata={'title':title,'fileList':file_list,'accounts':account_list,'materialLabel':str(data.get('materialLabel') or title or '、'.join(Path(path).name for path in file_list))[:1000],'accountLabel':str(data.get('accountLabel') or '、'.join(account_list))[:500]}
+    try:job_id,created=claim_job(type,metadata,data.get('requestId'),digest)
+    except ValueError as error:return jsonify({'code':409,'msg':str(error),'data':None}),409
+    if not created:
+        job=read_job(job_id)
+        if job.get('requestRejected'):
+            return jsonify({'code':409,'msg':job['message'],'data':{'confirmRepeatRequired':job.get('confirmRepeatRequired',False)}}),409
+        return jsonify({'code':200,'msg':'已找到同一次提交的任务，未重复执行','data':{'jobId':job_id,'deduplicated':True}})
+
+    from utils.publish_preflight import preflight_publish
+    preflight=preflight_publish(BASE_DIR,data,job_reader=read_job)
+    record_preflight(job_id,preflight)
+    if not preflight['ok']:
+        message='发布前检查未通过：'+'；'.join(preflight['errors'][:4])
+        update_job(job_id,'failed',message,requestRejected=True)
+        code=409 if preflight.get('activeTask') else 422
+        return jsonify({'code':code,'msg':message,'data':{'preflight':preflight}}),code
+    history_ids=[]
+    if not is_article and not dry_run and not is_draft:
+        try:
+            history_ids=publish_history.reserve(BASE_DIR,type,account_list,file_list,title,job_id,
+                allow_repeat=data.get('confirmRepeat') is True,job_reader=read_job)
+        except publish_history.DuplicatePublication as error:
+            update_job(job_id,'failed',str(error),requestRejected=True,confirmRepeatRequired=True)
+            return jsonify({'code':409,'msg':str(error),'data':{'confirmRepeatRequired':True}}),409
+        except ValueError as error:
+            update_job(job_id,'failed',str(error),requestRejected=True)
+            return jsonify({'code':409,'msg':str(error),'data':None}),409
+    def execute_publish_task():
+        update_job(job_id, 'running', '正在执行上传/发布流程')
         try:
             print(
                 f"🧵 后台发布线程启动: type={type}, title={title}, dryRun={dry_run}, contentType={content_type}",
@@ -628,16 +831,16 @@ def postVideo():
             match type:
                 case 1:
                     post_video_xhs(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                       start_days, dry_run, ai_generated)
+                                       start_days, dry_run, ai_generated, collection_name=collection_name, thumbnail_path=thumbnail_path)
                 case 2:
                     post_video_tencent(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                       start_days, is_draft, dry_run, ai_generated)
+                                       start_days, is_draft, dry_run, ai_generated, collection_name=collection_name, thumbnail_path=thumbnail_path)
                 case 3:
                     post_video_DouYin(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                              start_days, thumbnail_path, productLink, productTitle, ai_generated, dry_run)
+                              start_days, thumbnail_path, productLink, productTitle, ai_generated, dry_run, collection_name=collection_name, portrait_cover=data.get('portraitCover', ''))
                 case 4:
                     post_video_ks(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                              start_days, dry_run, ai_generated)
+                              start_days, dry_run, ai_generated, collection_name=collection_name, thumbnail_path=thumbnail_path)
                 case 5:
                     if content_type == 'article':
                         post_article_baijiahao(
@@ -654,10 +857,10 @@ def postVideo():
                         )
                     else:
                         post_video_baijiahao(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                  start_days, dry_run)
+                                  start_days, dry_run, collection_name=collection_name, thumbnail_path=thumbnail_path)
                 case 6:
                     post_video_bilibili(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                              start_days, dry_run, bilibili_creation_statement)
+                              start_days, dry_run, bilibili_creation_statement, collection_name=collection_name, thumbnail_path=thumbnail_path, recommendation_cover=data.get('bilibiliCover43', ''))
                 case 7:
                     if content_type == 'article':
                         post_article_toutiao(
@@ -675,7 +878,7 @@ def postVideo():
                         )
                     else:
                         post_video_toutiao(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                  start_days, dry_run)
+                                  start_days, dry_run, thumbnail_path=thumbnail_path)
                 case 8:
                     post_article_sohu(
                         title,
@@ -706,10 +909,24 @@ def postVideo():
                         work_statements[0] if work_statements else (work_statement or None),
                     )
             print(f"✅ 发布任务完成: type={type}, title={title}", flush=True)
+            if history_ids:publish_history.finish(BASE_DIR,history_ids,'submitted','流程完成，平台发布/审核状态待核对')
+            update_job(job_id, 'completed', '预览流程已完成（未发布）' if dry_run else '执行流程已完成，请到平台核对发布/审核状态')
         except Exception as e:
+            if history_ids:
+                safe_failure=len(file_list)==1 and isinstance(e,(CollectionSelectionError,FileNotFoundError))
+                publish_history.finish(BASE_DIR,history_ids,'failed' if safe_failure else 'needs_review',str(e))
+            update_job(job_id, 'failed', str(e) if isinstance(e, (CollectionSelectionError, RuntimeError, FileNotFoundError)) else f'执行失败（{e.__class__.__name__}），请查看本机后端日志', resultUncertain=getattr(e,'result_uncertain',False))
             print(f"❌ 发布视频时出错: {str(e)}", flush=True)
             import traceback
             traceback.print_exc()
+
+    def run_publish_task():
+        update_job(job_id, 'queued', '已排队，等待空闲上传名额（最多同时 2 个账号）')
+        with publish_browser_slot:
+            from utils.publish_jobs import bind_job
+            bind_job(job_id)
+            try:execute_publish_task()
+            finally:bind_job(None)
 
     thread = threading.Thread(target=run_publish_task, daemon=True)
     thread.start()
@@ -743,8 +960,102 @@ def postVideo():
         {
             "code": 200,
             "msg": submit_msg,
-            "data": None
+            "data": {"jobId": job_id}
         }), 200
+
+
+@app.route('/accountCollections', methods=['GET'])
+def account_collections():
+    try:
+        account_id = int(request.args.get('accountId', ''))
+    except (ValueError, TypeError):
+        return jsonify({'code':400,'msg':'账号参数无效','data':None}), 400
+    with closing(sqlite3.connect(_db_path())) as conn:
+        row = conn.execute('SELECT type, filePath FROM user_info WHERE id = ?', (account_id,)).fetchone()
+    if not row:
+        return jsonify({'code':404,'msg':'账号不存在','data':None}), 404
+    platform, filename = row
+    cookie_root = (BASE_DIR / 'cookiesFile').resolve()
+    cookie = (cookie_root / filename).resolve()
+    if cookie.parent != cookie_root:
+        return jsonify({'code':400,'msg':'账号登录文件路径无效','data':None}), 400
+    stamp = cookie.stat().st_mtime_ns if cookie.exists() else None
+    key = (account_id, platform, filename, stamp)
+    refresh = request.args.get('refresh') == '1'
+    with _collection_cache_lock:
+        cached = _collection_cache.get(key)
+    if cached and not refresh and cached[0] > time.monotonic():
+        return jsonify({'code':200,'msg':'ok','data':cached[1]})
+    if not _collection_workers.acquire(timeout=60):
+        return jsonify({'code':200,'msg':'ok','data':{'status':'unavailable','items':[],'message':'合集读取请求较多，请稍后刷新'}})
+    try:
+        try:
+            result = asyncio.run(asyncio.wait_for(discover_collections(platform, cookie), timeout=40))
+        except CollectionCatalogError as error:
+            result = {'status':error.status,'items':[],'message':str(error)}
+        except Exception:
+            result = {'status':'unavailable','items':[],'message':'合集读取失败，请检查网络或重新登录后刷新'}
+        result = dict(result, accountId=account_id, platform=platform)
+        if platform != 6:
+            names = [item['name'] for item in result['items']]
+            result['items'] = [dict(item, disabled=bool(item.get('disabled')) or names.count(item['name'])>1) for item in result['items']]
+        ttl = 300 if result['status'] in ('ready','empty') else 15
+        with _collection_cache_lock:
+            # Invalidate older login states for this account.
+            for old in list(_collection_cache):
+                if old[0] == account_id:
+                    del _collection_cache[old]
+            _collection_cache[key] = (time.monotonic()+ttl, result)
+        return jsonify({'code':200,'msg':'ok','data':result})
+    finally:
+        _collection_workers.release()
+
+
+@app.route('/publishWindow', methods=['POST'])
+def publish_window():
+    if not local_material_action_allowed():return jsonify({'code':403,'msg':'仅允许本机管理台操作'}),403
+    data=request.get_json()
+    if not isinstance(data.get('visible'),bool):return jsonify({'code':400,'msg':'无效的显示状态'}),400
+    job=read_job(data.get('id',''))
+    if not job or job['status']!='running':return jsonify({'code':409,'msg':'任务已结束或尚未启动'}),409
+    try:
+        from utils.publish_windows import set_visible
+        set_visible(job['id'],data['visible'])
+        return jsonify({'code':200,'data':read_job(job['id']),'msg':'ok'})
+    except ValueError as error:return jsonify({'code':409,'msg':str(error)}),409
+
+
+@app.route('/publishJobs', methods=['GET'])
+def publish_jobs_history():
+    if not local_material_read_allowed():return jsonify({'code':403,'msg':'请从本机管理台查看任务记录'}),403
+    return jsonify({'code':200,'data':list_jobs(200)})
+
+
+@app.route('/publishJob', methods=['GET'])
+def publish_job_status():
+    from utils import ks_collection_tasks
+    job_id=request.args.get('id', '')
+    job = read_job(job_id)
+    collection=ks_collection_tasks.get(job_id=job_id) if job_id else None
+    if collection and collection['status']!='prepared':
+        job=job or {'id':job_id,'platform':4,'status':'completed','progress':100,'stage':'视频已提交','message':'视频已提交，合集关联单独处理'}
+        job['collectionTask']=ks_collection_tasks.public(collection)
+        job['videoSubmitted']=True
+    if not job:
+        return jsonify({'code':404,'msg':'未找到任务记录，旧版本的内存任务可能未保存','data':None}), 404
+    return jsonify({'code':200,'msg':'ok','data':job})
+
+
+@app.route('/retryKuaishouCollection', methods=['POST'])
+def retry_kuaishou_collection():
+    if not local_material_action_allowed():
+        return jsonify({'code':403,'msg':'仅允许本机操作','data':None}),403
+    from utils import ks_collection_tasks
+    task=ks_collection_tasks.get(task_id=(request.get_json(silent=True) or {}).get('id',''))
+    if not task or task['status']=='prepared':
+        return jsonify({'code':404,'msg':'没有已提交视频的合集任务','data':None}),404
+    ks_collection_tasks.start(task['id'])
+    return jsonify({'code':200,'msg':'已安排重试加入合集，不会重新上传视频','data':ks_collection_tasks.public(ks_collection_tasks.get(task['id']))})
 
 
 @app.route('/updateUserinfo', methods=['POST'])
@@ -1442,4 +1753,6 @@ def sse_stream(status_queue):
             time.sleep(0.1)
 
 if __name__ == '__main__':
+    from utils.ks_collection_tasks import resume
+    resume()
     app.run(host='0.0.0.0' ,port=5409)

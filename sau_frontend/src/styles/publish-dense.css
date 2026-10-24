@@ -1,0 +1,113 @@
+/* Publishing workbench: compact desktop layout; natural scrolling on small screens. */
+#app.publish-shell .el-main{padding:12px 18px}
+#app.publish-shell .publish-center{max-width:none;padding:0 0 72px;margin:0}
+#app.publish-shell .tab-management{margin-bottom:10px!important}
+#app.publish-shell .tab-management .tab-item{height:32px!important}
+#app.publish-shell .publish-grid{grid-template-columns:minmax(0,1.55fr) minmax(330px,1fr);gap:14px}
+#app.publish-shell .publish-main-column,#app.publish-shell .publish-settings-column{gap:10px}
+#app.publish-shell .editor-panel,#app.publish-shell .publish-settings-column>.account-section{padding:12px 14px;border-radius:8px}
+#app.publish-shell .panel-caption{font-size:13px;line-height:20px;padding-bottom:8px;margin-bottom:10px;gap:10px}
+#app.publish-shell .publish-center .publish-grid h3{font-size:12px!important;line-height:20px;margin-bottom:6px!important}
+#app.publish-shell .publish-center .editor-panel>div:not(.panel-caption){margin-bottom:10px!important}
+#app.publish-shell .publish-center .editor-panel>div:last-child{margin-bottom:0!important}
+#app.publish-shell .publish-center :is(.el-input__wrapper,.el-select__wrapper){min-height:32px}
+#app.publish-shell .publish-center .el-button{height:30px;font-size:12px}
+#app.publish-shell .video-panel{position:relative}
+#app.publish-shell .video-panel .upload-options{position:absolute;top:8px;right:14px}
+#app.publish-shell .video-panel .upload-btn{min-height:34px;height:34px;padding:0 16px;font-size:13px;font-weight:500;background:#3478e5!important;border-color:#3478e5!important;color:#fff!important;box-shadow:0 2px 5px #3478e51a}
+#app.publish-shell .video-panel .upload-btn .el-icon{color:#fff!important;font-size:15px}
+#app.publish-shell .video-panel .upload-btn:hover{background:#2468d2!important;border-color:#2468d2!important}
+#app.publish-shell .video-panel .upload-btn:active{background:#1d58b6!important;border-color:#1d58b6!important}
+#app.publish-shell .video-panel .uploaded-files{margin-top:0!important}
+#app.publish-shell .selected-video-preview{width:124px;height:70px;grid-row:1/3}
+#app.publish-shell .publish-center .file-item{grid-template-columns:124px minmax(0,1fr) auto;column-gap:12px;row-gap:4px}
+#app.publish-shell .file-item .el-link{align-self:end;font-size:13px}
+#app.publish-shell .file-item .file-size{align-self:start}
+#app.publish-shell .file-item .el-button{grid-column:3;grid-row:1/3;justify-self:end}
+#app.publish-shell .publish-center .file-list{gap:10px}
+#app.publish-shell .basic-panel :is(.title-section,.topic-section){display:grid;grid-template-columns:68px minmax(0,1fr);align-items:center;gap:8px}
+#app.publish-shell .basic-panel :is(.title-section,.topic-section)>h3{margin:0!important;white-space:nowrap}
+#app.publish-shell .basic-panel h3 .optional-hint{display:none}
+#app.publish-shell .publish-center .title-input .el-textarea__inner{height:34px;min-height:34px!important;line-height:20px;padding:6px 64px 6px 10px;resize:vertical;font-size:13px}
+#app.publish-shell .publish-center .topic-display{gap:6px!important;flex-direction:row;align-items:center;flex-wrap:wrap}
+#app.publish-shell .publish-center .selected-topics{display:flex;gap:5px;flex-wrap:wrap;flex:1;min-width:0}
+#app.publish-shell .publish-center .topic-tag{height:28px;font-size:11px!important;padding:0 7px}
+#app.publish-shell .publish-center .topic-actions{display:flex;gap:6px;flex:none}
+#app.publish-shell .publish-center .topic-actions .el-button{height:28px;padding:0 9px;margin:0}
+#app.publish-shell .publish-center .video-cover-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0}
+#app.publish-shell .publish-center .video-cover-section{margin:0!important}
+#app.publish-shell .publish-center .video-cover-upload{margin-top:5px;line-height:0}
+#app.publish-shell .publish-center .video-cover-card{padding:8px;border:1px solid #edf0f3;border-radius:6px;min-width:0}
+#app.publish-shell .publish-center .video-cover-card>strong{font-size:11px;line-height:18px;display:block}
+#app.publish-shell .publish-center .video-cover-card>.optional-hint{min-height:28px;line-height:14px;font-size:10px!important;margin-top:3px}
+#app.publish-shell .publish-center .video-cover-upload .el-upload{height:clamp(78px,11vh,114px);width:100%;aspect-ratio:auto!important;border:0;background:#fafbfc;border-radius:3px}
+#app.publish-shell .publish-center .video-cover-upload img{display:block;width:100%;height:100%;object-fit:contain}
+#app.publish-shell .publish-center .cover-file-name{display:flex;gap:4px;justify-content:space-between;align-items:center;line-height:16px;font-size:10px;overflow-wrap:anywhere;margin-top:4px}
+#app.publish-shell .cover-file-name .el-button{padding:0;height:22px;font-size:10px;flex:none}
+#app.publish-shell .publish-center .video-cover-section>.optional-hint{font-size:10px!important;line-height:15px}
+#app.publish-shell .schedule-panel .schedule-section{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px}
+#app.publish-shell .schedule-panel .schedule-section>h3{margin:0!important}
+#app.publish-shell .schedule-panel .schedule-controls{flex-direction:row;align-items:center;gap:10px}
+#app.publish-shell .schedule-panel .schedule-settings{grid-column:1/-1;margin:0!important;padding:10px!important}
+#app.publish-shell .schedule-panel .schedule-settings .schedule-item{margin:4px 0}
+#app.publish-shell .publish-center .account-platform-grid{gap:0;margin-top:6px}
+#app.publish-shell .publish-center .account-platform-card{grid-template-columns:100px minmax(0,1fr);border:0;border-bottom:1px solid #f0f1f4;border-radius:0;padding:5px 0;gap:8px;min-height:34px}
+#app.publish-shell .publish-center .account-platform-card:last-child{border-bottom:0}
+#app.publish-shell .publish-center .platform-badge{width:25px;height:25px;font-size:14px;border-radius:6px}
+#app.publish-shell .publish-center .account-platform-card .el-checkbox{min-height:24px}
+#app.publish-shell .publish-settings-column>.account-section>p{font-size:10px!important;line-height:15px;margin:0}
+#app.publish-shell .publish-center .platform-range{margin:0;font-size:10px}
+#app.publish-shell .platform-options-panel .platform-section>div[style]{margin-top:4px!important}
+#app.publish-shell .platform-options-panel .platform-section>div>.optional-hint{display:none}
+#app.publish-shell .publish-center .platform-settings-tabs{margin-top:3px}
+#app.publish-shell .publish-center .platform-settings-tabs .el-radio-button__inner{padding:7px 3px;font-size:11px}
+#app.publish-shell .platform-options-panel .account-section>p{display:none}
+#app.publish-shell .publish-center .collection-account-row{margin:5px 0 0;gap:4px}
+#app.publish-shell .publish-center .collection-account-name{padding:2px 6px;font-size:10px;line-height:18px}
+#app.publish-shell .publish-center .collection-account-control>.optional-hint{line-height:15px;font-size:10px!important;margin-top:3px}
+#app.publish-shell .platform-options-panel :is(.bilibili-creation-section,.content-type-section){display:grid;grid-template-columns:70px minmax(0,1fr);align-items:center;gap:5px}
+#app.publish-shell .platform-options-panel :is(.bilibili-creation-section,.content-type-section)>h3{margin:0!important}
+#app.publish-shell .platform-options-panel :is(.bilibili-creation-section,.content-type-section)>.optional-hint{grid-column:1/-1}
+#app.publish-shell .publish-center .publish-settings-column :is(.el-checkbox,.el-radio){min-height:24px}
+#app.publish-shell .publish-center .publish-settings-column :is(.el-checkbox__label,.el-radio__label){font-size:11px;line-height:20px}
+#app.publish-shell .product-more{border-top:1px solid #eef0f4;padding-top:8px;font-size:11px;color:#737c8f}
+#app.publish-shell .product-more summary{cursor:pointer}
+#app.publish-shell .product-more .product-section{margin-top:8px;display:grid;gap:6px}
+#app.publish-shell .compact-task-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px}
+#app.publish-shell .compact-task-row{display:flex;align-items:center;gap:8px;font-size:10px;min-height:28px;border-top:1px solid #f0f1f4}
+#app.publish-shell .compact-task-row strong{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:48%}
+#app.publish-shell .compact-task-row>span{margin-left:auto;color:#87909c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#app.publish-shell .compact-task-row>.task-text-failed,#app.publish-shell .compact-task-row>.task-text-awaiting_confirmation{color:#d65050}
+#app.publish-shell .compact-task-row>.task-text-completed{color:#329453}
+#app.publish-shell .has-task-status .publish-settings-column>.account-section>p{display:none}
+#app.publish-shell .has-task-status .account-platform-card{min-height:26px;padding-top:1px;padding-bottom:1px}
+#app.publish-shell .has-task-status .account-platform-card .el-checkbox{min-height:22px}
+#app.publish-shell .has-task-status .platform-badge{width:22px;height:22px}
+#app.publish-shell .has-task-status .platform-options-panel>div:not(:last-child){margin-bottom:4px!important}
+#app.publish-shell .has-task-status .collection-account-name{line-height:15px;padding-top:0;padding-bottom:0}
+#app.publish-shell .has-task-status .compact-task-row{min-height:23px}
+#app.publish-shell .has-task-status .compact-task-heading{margin-bottom:2px}
+#app.publish-shell .publish-center .action-buttons{left:var(--publish-sidebar-width,200px);min-height:60px;padding:10px 18px!important;gap:10px!important;flex-wrap:nowrap}
+#app.publish-shell .publish-center .publish-summary{display:grid;gap:3px}
+#app.publish-shell .publish-center .publish-submit{height:36px;min-width:150px}
+#app.publish-shell .task-dock-summary{padding-right:12px;gap:8px}
+@media(min-width:931px) and (max-height:820px){
+ #app.publish-shell .publish-main-column,#app.publish-shell .publish-settings-column{gap:8px}
+ #app.publish-shell .el-main{padding-top:8px;padding-bottom:8px}
+ #app.publish-shell .editor-panel,#app.publish-shell .publish-settings-column>.account-section{padding:9px 12px}
+ #app.publish-shell .panel-caption{padding-bottom:5px;margin-bottom:7px;line-height:18px}
+ #app.publish-shell .selected-video-preview{height:56px;width:100px}
+ #app.publish-shell .publish-center .file-item{grid-template-columns:100px minmax(0,1fr) auto}
+ #app.publish-shell .publish-center .video-cover-upload .el-upload{height:76px}
+ #app.publish-shell .publish-center .video-cover-section>.optional-hint{font-size:9px!important;line-height:13px}
+ #app.publish-shell .publish-center .video-cover-card>.optional-hint{min-height:24px;font-size:9px!important;line-height:12px}
+ #app.publish-shell .publish-center .video-cover-card{padding:6px}
+ #app.publish-shell .publish-center .editor-panel>div:not(.panel-caption){margin-bottom:7px!important}
+ #app.publish-shell .publish-center .editor-panel>div:last-child{margin-bottom:0!important}
+ #app.publish-shell .publish-center .account-platform-card{padding:3px 0;min-height:29px}
+ #app.publish-shell .publish-center .account-platform-grid{margin-top:3px}
+}
+@media(min-width:1600px){#app.publish-shell .publish-grid{grid-template-columns:minmax(0,1.65fr) minmax(380px,1fr)}#app.publish-shell .editor-panel,#app.publish-shell .publish-settings-column>.account-section{padding:14px 16px}}
+@media(max-width:1100px){#app.publish-shell .el-main{padding:10px 12px}#app.publish-shell .publish-grid{grid-template-columns:minmax(0,1.4fr) 310px;gap:10px}#app.publish-shell .publish-center .video-cover-grid{gap:5px}#app.publish-shell .publish-center .video-cover-card{padding:5px}#app.publish-shell .selected-video-preview{width:100px;height:60px}#app.publish-shell .publish-center .file-item{grid-template-columns:100px minmax(0,1fr) auto}#app.publish-shell .basic-panel :is(.title-section,.topic-section){grid-template-columns:48px minmax(0,1fr)}}
+@media(max-width:930px){#app.publish-shell .publish-grid{grid-template-columns:minmax(0,1fr)}#app.publish-shell .publish-settings-column{grid-row:auto}#app.publish-shell .publish-center .account-platform-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}#app.publish-shell .publish-center .action-buttons{left:64px}#app.publish-shell .publish-center .publish-summary{display:none}}
+@media(max-width:570px){#app.publish-shell .publish-center .video-cover-grid{grid-template-columns:minmax(0,1fr)}#app.publish-shell .publish-center .video-cover-upload .el-upload{height:120px}#app.publish-shell .publish-center .account-platform-grid{grid-template-columns:1fr}#app.publish-shell .basic-panel :is(.title-section,.topic-section){grid-template-columns:minmax(0,1fr)}#app.publish-shell .publish-center .file-item{grid-template-columns:90px minmax(0,1fr)}#app.publish-shell .selected-video-preview{width:90px;height:60px}#app.publish-shell .file-item .el-button{grid-column:2;grid-row:3;justify-self:start}#app.publish-shell .publish-center .publish-submit{min-width:0;padding:0 10px}#app.publish-shell .task-dock-summary strong{font-size:10px}#app.publish-shell .task-dock-summary small{display:none}#app.publish-shell .publish-center .action-buttons{padding:10px!important}}

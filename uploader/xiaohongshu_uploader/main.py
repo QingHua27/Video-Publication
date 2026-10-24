@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from utils.early_video_cover import prepare_video_and_cover, cover_entry_available
+from utils.upload_progress import report_upload_wait
+from utils.publish_windows import launch_browser
+from utils.publish_jobs import report_stage
 
 import asyncio
 import inspect
@@ -7,6 +11,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from patchright.async_api import Error as BrowserError
+from patchright.async_api import TimeoutError as BrowserTimeoutError
 from patchright.async_api import Page
 from patchright.async_api import Playwright
 from patchright.async_api import async_playwright
@@ -151,14 +157,14 @@ async def cookie_auth(account_file):
 
     async with async_playwright() as playwright:
         if LOCAL_CHROME_PATH:
-            browser = await playwright.chromium.launch(headless=True, executable_path=LOCAL_CHROME_PATH)
+            browser = await launch_browser(playwright.chromium, headless=True, executable_path=LOCAL_CHROME_PATH)
         else:
-            browser = await playwright.chromium.launch(headless=True, channel="chrome")
+            browser = await launch_browser(playwright.chromium, headless=True, channel="chrome")
         try:
             context = await browser.new_context(storage_state=account_file)
             context = await set_init_script(context)
             page = await context.new_page()
-            await page.goto(XHS_PUBLISH_VIDEO_URL)
+            await page.goto(XHS_PUBLISH_VIDEO_URL, wait_until="domcontentloaded", timeout=60000)
             await page.wait_for_timeout(3000)
 
             if page.url.startswith(XHS_LOGIN_URL):
@@ -177,8 +183,8 @@ async def cookie_auth(account_file):
             xiaohongshu_logger.success(_msg("🥳", "cookie 有效"))
             return True
         except Exception as exc:
-            xiaohongshu_logger.warning(_msg("😵", f"cookie 校验时出错，按失效处理: {exc}"))
-            return False
+            xiaohongshu_logger.warning(_msg("😵", f"登录校验暂时无法完成: {exc}"))
+            raise RuntimeError('小红书登录校验未完成：浏览器或网络连接异常，请稍后重试；这不代表cookie失效') from exc
         finally:
             await browser.close()
 
@@ -220,7 +226,7 @@ async def xiaohongshu_cookie_gen(
     account_path.parent.mkdir(parents=True, exist_ok=True)
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=headless, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=headless, channel="chrome")
         context = await browser.new_context()
         context = await set_init_script(context)
         qrcode_path = None
@@ -506,89 +512,78 @@ class XiaoHongShuBaseUploader(BaseVideoUploader):
             pass
 
     async def _click_publish_button(self, page: Page, scheduled: bool = False) -> bool:
-        """多策略点击「发布」/「定时发布」。"""
-        await self._dismiss_blocking_overlays(page)
-
-        if scheduled:
-            candidates = [
-                page.get_by_role("button", name="定时发布"),
-                page.get_by_role("button", name="定时发布", exact=True),
-                page.locator('button:has-text("定时发布")').first,
-                page.get_by_text("定时发布", exact=True),
-            ]
-            action_name = "定时发布"
-        else:
-            candidates = [
-                page.get_by_role("button", name="发布", exact=True),
-                page.get_by_role("button", name="发布"),
-                page.locator('button:has-text("发布")').filter(has_not_text="定时").first,
-                page.get_by_text("发布", exact=True),
-                page.locator('button.d-button:has-text("发布"), button.red:has-text("发布"), .submit button:has-text("发布")').first,
-                page.locator('[class*="submit"] button:has-text("发布"), [class*="footer"] button:has-text("发布"), [class*="publish"] button:has-text("发布")').first,
-            ]
-            action_name = "发布"
-
-        for btn in candidates:
-            try:
-                if not await btn.count():
-                    continue
-                target = btn.first if hasattr(btn, "first") else btn
-                try:
-                    if not await target.is_visible():
-                        continue
-                except Exception:
-                    pass
-                try:
-                    disabled = await target.get_attribute("disabled")
-                    aria_disabled = await target.get_attribute("aria-disabled")
-                    cls = (await target.get_attribute("class")) or ""
-                    if disabled is not None or aria_disabled == "true" or "disabled" in cls:
-                        continue
-                except Exception:
-                    pass
-
-                await target.scroll_into_view_if_needed()
-                await page.wait_for_timeout(200)
-                try:
-                    await target.click(timeout=3000)
-                except Exception:
-                    await target.click(force=True, timeout=3000)
-                xiaohongshu_logger.info(_msg("🖱️", f"已点击「{action_name}」按钮"))
-                return True
-            except Exception:
-                continue
-
-        # JS 兜底
-        try:
-            target_text = "定时发布" if scheduled else "发布"
-            clicked = await page.evaluate(
-                """(targetText) => {
-                    const buttons = Array.from(document.querySelectorAll('button, [role="button"], a, div, span'));
-                    const match = buttons.find(el => {
-                        const t = (el.innerText || el.textContent || '').trim();
-                        if (t !== targetText) return false;
-                        const rect = el.getBoundingClientRect();
-                        if (rect.width < 20 || rect.height < 16) return false;
-                        const style = window.getComputedStyle(el);
-                        if (style.display === 'none' || style.visibility === 'hidden' || style.pointerEvents === 'none') return false;
-                        if (el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
-                        if ((el.className || '').toString().includes('disabled')) return false;
-                        return true;
-                    });
-                    if (!match) return false;
-                    match.scrollIntoView({block: 'center', inline: 'center'});
-                    match.click();
-                    return true;
-                }""",
-                target_text,
-            )
-            if clicked:
-                xiaohongshu_logger.info(_msg("🖱️", f"已通过 JS 兜底点击「{action_name}」"))
-                return True
-        except Exception as e:
-            xiaohongshu_logger.debug(_msg("😵", f"JS 点击{action_name}失败: {e}"))
-
+        """One ordinary click; never force-click or use a second click as fallback."""
+        name = '定时发布' if scheduled else '发布'
+        candidates = page.get_by_role('button', name=name, exact=True)
+        if not await candidates.count():
+            try:await candidates.first.wait_for(state='visible', timeout=15000)
+            except BrowserTimeoutError:return False
+        for index in range(await candidates.count()):
+            target=candidates.nth(index)
+            if not await target.is_visible() or not await target.is_enabled():continue
+            await target.scroll_into_view_if_needed()
+            self._publish_attempted=True
+            try:await target.click(timeout=10000)
+            except Exception as error:
+                raise PublishResultUnknown('小红书发布点击未确认完成，已停止重复点击；请到平台核对结果') from error
+            xiaohongshu_logger.info(_msg('🖱️', f'已点击「{name}」，随后只核对结果，不再重复点击'))
+            return True
         return False
+
+    async def _check_publish_risk(self,page):
+        text=await page.locator('body').inner_text(timeout=5000)
+        import re
+        match=re.search(r'操作过于频繁|发布过于频繁|操作频繁|账号存在异常|账号存在安全风险|禁止发布|发布失败',text)
+        if match:raise RuntimeError(f'小红书提示「{match.group()}」，已停止操作；请在官方页面处理并核对结果')
+
+    async def _verification_visible(self,page):
+        for text in ('获取验证码','请输入验证码','安全验证','请完成验证'):
+            items=page.get_by_text(text,exact=True)
+            for index in range(await items.count()):
+                if await items.nth(index).is_visible():return True
+        return await page.locator('[class*="captcha"]:visible,[class*="verify-dialog"]:visible').count()>0
+
+    async def _wait_manual_verification(self,page,timeout=180,poll_interval=.5):
+        deadline=asyncio.get_running_loop().time()+timeout
+        while await self._verification_visible(page):
+            report_stage('等待人工验证：请点击显示页面处理',85)
+            if asyncio.get_running_loop().time()>=deadline:
+                raise VerificationRequiredError('小红书验证超时，已停止操作；请到平台处理并核对发布结果')
+            await asyncio.sleep(poll_interval)
+
+    async def publish_once_and_confirm(self,page,scheduled=False,*,timeout=120,poll_interval=.5,verification_timeout=180):
+        if getattr(self,'_publish_attempted',False):
+            raise PublishResultUnknown('本次小红书发布已尝试提交，禁止重复点击；请到平台核对')
+        await self._check_publish_risk(page)
+        await self._wait_manual_verification(page,verification_timeout,poll_interval)
+        await self._check_publish_risk(page)
+        if not await self._click_publish_button(page,scheduled):
+            raise RuntimeError('小红书未找到可点击的发布按钮，未执行发布；请检查表单和上传状态')
+        report_stage('已点击发布，正在核对平台结果（不会重复提交）',90)
+        deadline=asyncio.get_running_loop().time()+timeout
+        from urllib.parse import urlsplit
+        while True:
+            if urlsplit(page.url).path.rstrip('/')=='/publish/success':
+                xiaohongshu_logger.success(_msg('✅','已确认进入小红书发布成功页'))
+                return
+            if '/login' in urlsplit(page.url).path:
+                raise PublishResultUnknown('小红书提交后返回登录页，结果未确认；请先登录并核对，未重复提交')
+            try:
+                await self._check_publish_risk(page)
+                if await self._verification_visible(page):
+                    started=asyncio.get_running_loop().time()
+                    await self._wait_manual_verification(page,verification_timeout,poll_interval)
+                    deadline+=asyncio.get_running_loop().time()-started
+            except BrowserError as error:
+                # Navigation may invalidate a read midway through the observer.
+                # Retrying reads is safe; the publish action stays outside this loop.
+                if page.is_closed():
+                    raise PublishResultUnknown('小红书提交后页面已关闭，请到平台核对；未重复提交') from error
+            if asyncio.get_running_loop().time()>=deadline:break
+            await asyncio.sleep(poll_interval)
+        from utils.publish_diagnostics import capture_editor_failure
+        path=await capture_editor_failure(page,'xiaohongshu','publish-result-unknown')
+        raise PublishResultUnknown(f'小红书发布按钮仅点击一次，但未确认发布结果；请到平台核对，勿直接重发。页面截图：{path}')
 
 
 class XiaoHongShuVideo(XiaoHongShuBaseUploader):
@@ -634,6 +629,7 @@ class XiaoHongShuVideo(XiaoHongShuBaseUploader):
         await page.locator('div.progress-div [class^="upload-btn-input"]').set_input_files(self.file_path)
 
     async def set_thumbnail(self, page: Page, thumbnail_path: str):
+        report_stage('设置封面（视频可继续上传）',35)
         if not thumbnail_path:
             return
 
@@ -643,84 +639,88 @@ class XiaoHongShuVideo(XiaoHongShuBaseUploader):
         cover_upload_dialog = cover_plugin_title.locator(
             "xpath=ancestor::div[contains(@class, 'cover-plugin-preview')]"
         ).locator("div.cover > div.default:visible")
-        await cover_upload_dialog.wait_for(state="visible", timeout=30000)
+        edit=page.locator('.cover-edit-entry').first
+        if not await edit.count():edit=page.get_by_text('编辑封面',exact=False).first
+        if await edit.count() and await edit.is_visible():await edit.click()
+        else:
+            await cover_upload_dialog.wait_for(state='visible',timeout=30000)
+            await cover_upload_dialog.click()
 
-        await cover_upload_dialog.click(force=True)
+        modal = page.locator('div.d-modal.cover-modal:visible, [role="dialog"]:visible, [class*="cover-modal"]:visible, [class*="cover-editor"]:visible').first
+        await page.wait_for_timeout(700)
+        if not await modal.count() and await edit.count():await edit.evaluate('(el)=>el.click()')
 
-        modal = page.locator("div.d-modal.cover-modal")
-        await modal.wait_for(state="visible", timeout=30000)
+        try:await modal.wait_for(state='visible',timeout=30000)
+        except Exception as error:
+            from utils.publish_diagnostics import capture_editor_failure
+            path=await capture_editor_failure(page,'xiaohongshu','cover')
+            raise RuntimeError(f'小红书封面编辑窗口未打开，未发布；页面截图：{path}') from error
 
-        file_input = modal.locator('input[type="file"][accept*="image"]').first
-        await file_input.wait_for(state="attached", timeout=10000)
-        await file_input.set_input_files(thumbnail_path)
+        modern=page.locator('.main-cover-editor-modal:visible').first
+        if await modern.count():modal=modern
+        await self.upload_cover_image(page, modal, thumbnail_path)
         await page.wait_for_timeout(2000)
 
-        confirm_button = modal.locator("button.mojito-button").filter(has_text="确定").first
-        await confirm_button.wait_for(state="visible", timeout=10000)
-        await confirm_button.click()
+        confirm_button=page.locator('button.mojito-button.bg-red:visible').first
+        if not await confirm_button.count():
+            confirm_button=modal.locator('button:visible').filter(has_text=__import__('re').compile(r'^(确定|确认|完成|保存|保存封面)$')).first
+        try:
+            await confirm_button.wait_for(state="visible", timeout=30000)
+            await confirm_button.click(timeout=30000)
+        except Exception as error:
+            raise RuntimeError('小红书封面已上传，但未能完成封面确认；请检查封面裁剪窗口后重试') from error
 
         await modal.wait_for(state="hidden", timeout=30000)
         xiaohongshu_logger.success(_msg("🥳", "封面已经设置完成"))
 
+    async def upload_cover_image(self, page: Page, modal, thumbnail_path: str, *, timeout=30000):
+        # The editor shell can appear before its lazy-loaded image input mounts.
+        report_stage('等待小红书封面图片上传控件加载（视频可继续上传）', 35)
+        file_input = modal.locator('input[type="file"][accept*="image"],input[type="file"][accept*="png"],input[type="file"][accept*="jpg"]').first
+        try:
+            await file_input.wait_for(state="attached", timeout=timeout)
+        except BrowserTimeoutError as error:
+            from utils.publish_diagnostics import capture_editor_failure
+            path = await capture_editor_failure(page, 'xiaohongshu', 'cover-input')
+            report_stage('小红书封面编辑器加载失败', 35)
+            raise RuntimeError(f'小红书封面图片上传控件未加载（已等待{timeout / 1000:g}秒），未发布；请稍后重试。页面截图：{path}') from error
+        await file_input.set_input_files(thumbnail_path)
+        report_stage('小红书封面图片已选择，等待确认', 35)
+
+    async def wait_for_video_upload(self, page: Page):
+        report_stage('等待视频上传完成',35)
+        await page.locator('input[placeholder*="填写标题"]').first.wait_for(state='visible',timeout=60000)
+        stable=0
+        for _ in range(600):
+            await report_upload_wait(page)
+            text=await page.locator('body').first.inner_text(timeout=5000)
+            if '上传失败' in text:raise RuntimeError('小红书视频上传失败，未执行发布')
+            busy=__import__('re').search(r'上传中\s*\d+(?:\.\d+)?%|正在上传|视频上传中',text)
+            stable=0 if busy else stable+1
+            if stable>=3:return
+            await asyncio.sleep(1)
+        raise RuntimeError('小红书视频上传超时，未开始设置封面或发布')
+
     async def upload_video_content(self, page: Page) -> None:
         xiaohongshu_logger.info(_msg("🏃", f"小人开始搬运视频: {self.title}.mp4"))
         xiaohongshu_logger.info(_msg("🧭", "小人正在赶往视频发布页"))
-        await page.goto(XHS_PUBLISH_VIDEO_URL)
+        await page.goto(XHS_PUBLISH_VIDEO_URL, wait_until="domcontentloaded", timeout=60000)
         await page.wait_for_url(XHS_PUBLISH_VIDEO_URL)
         await page.locator("div[class^='upload-content'] input[class='upload-input']").set_input_files(self.file_path)
 
-        max_upload_retries = 120
-        upload_retry_count = 0
-        while upload_retry_count < max_upload_retries:
-            upload_retry_count += 1
-            try:
-                upload_input = await page.wait_for_selector('input.upload-input', timeout=3000)
-                preview_new = await upload_input.query_selector(
-                    'xpath=following-sibling::div[contains(@class, "preview-new")]')
-                if preview_new:
-                    # 获取整个预览区域的文本，更鲁棒地判断上传状态
-                    all_text = await preview_new.inner_text()
-                    upload_success = any(keyword in all_text for keyword in ['上传成功', '分辨率', '重新上传', '编辑封面', '已上传', '已选择', '100%'])
-
-                    if not upload_success:
-                        # 检查是否有特定的状态码或百分比
-                        stage_elements = await preview_new.query_selector_all('div.stage')
-                        for stage in stage_elements:
-                            text_content = await page.evaluate('(element) => element.textContent', stage)
-                            if '上传成功' in text_content or '分辨率' in text_content:
-                                upload_success = True
-                                break
-
-                    if upload_success:
-                        xiaohongshu_logger.success(_msg("🥳", "视频已经传完啦"))
-                        break
-
-                    if self.debug and upload_retry_count % 10 == 0:
-                        preview_text = all_text.strip().replace('\n', ' ')
-                        xiaohongshu_logger.debug(_msg("🧍", f"预览区域内容: {preview_text}"))
-                    if upload_retry_count % 10 == 0:
-                        xiaohongshu_logger.debug(_msg("🧍", f"还没看到上传成功标识，小人继续等一会（第{upload_retry_count}次）"))
-                else:
-                    # 尝试检查标题输入框是否已经出现，如果是，说明已经进入编辑状态
-                    title_container = page.locator('input[placeholder*="填写标题"]')
-                    if await title_container.count() > 0 and await title_container.is_visible():
-                        xiaohongshu_logger.success(_msg("🥳", "虽然没看到预览区，但标题框出来了，小人继续"))
-                        break
-                    if upload_retry_count % 10 == 0:
-                        xiaohongshu_logger.debug(_msg("🧍", f"还没拿到预览区域，小人继续等一会（第{upload_retry_count}次）"))
-            except Exception as e:
-                if upload_retry_count % 10 == 0:
-                    xiaohongshu_logger.debug(_msg("😵", f"上传状态还没稳定下来，小人继续观察（第{upload_retry_count}次）: {e}"))
-            await asyncio.sleep(2)
-        else:
-            xiaohongshu_logger.warning(_msg("⚠️", f"上传等待超时：{max_upload_retries}次尝试后仍未完成"))
+        await prepare_video_and_cover(
+            lambda:self.wait_for_video_upload(page),
+            lambda:cover_entry_available(page,selectors=('.cover-edit-entry','.cover-plugin-preview div.cover > div.default'),labels=('编辑封面',)),
+            lambda:self.set_thumbnail(page,self.thumbnail_path),required=bool(self.thumbnail_path))
 
         xiaohongshu_logger.info(_msg("✍️", "小人开始填标题、描述和话题"))
         await self.fill_meta(page)
 
         await self.set_ai_content_declaration(page)
 
-        await self.set_thumbnail(page, self.thumbnail_path)
+        from utils.publish_collections import apply_video_collection
+        await apply_video_collection(page, 1, getattr(self, 'collection_name', ''))
+
 
         # await self.set_location(page, "青岛市")
 
@@ -743,73 +743,14 @@ class XiaoHongShuVideo(XiaoHongShuBaseUploader):
             xiaohongshu_logger.info(_msg("🛑", "预览结束（未点击发布）"))
             return
 
-        max_publish_retries = 600
-        publish_retry_count = 0
-        verification_waited = False
-        while publish_retry_count < max_publish_retries:
-            publish_retry_count += 1
-            try:
-                # 检测验证码弹窗
-                if not verification_waited:
-                    verification_indicators = ['text="获取验证码"', 'text="请输入验证码"', 'text="安全验证"',
-                                               'text="请完成验证"', '[class*="captcha"]', '[class*="verify"]']
-                    has_verification = False
-                    for selector in verification_indicators:
-                        try:
-                            if await page.locator(selector).count() > 0:
-                                has_verification = True
-                                break
-                        except Exception:
-                            continue
-                    if has_verification:
-                        xiaohongshu_logger.warning(_msg("⚠️", "检测到验证弹窗！请在浏览器窗口中手动完成验证..."))
-                        xiaohongshu_logger.info(_msg("⏳", "等待手动验证完成（最多180秒）..."))
-                        for wait_i in range(360):
-                            await asyncio.sleep(0.5)
-                            still_has = False
-                            for selector in verification_indicators:
-                                try:
-                                    if await page.locator(selector).count() > 0:
-                                        still_has = True
-                                        break
-                                except Exception:
-                                    continue
-                            if not still_has:
-                                xiaohongshu_logger.success(_msg("✅", "验证已完成，继续发布流程"))
-                                verification_waited = True
-                                break
-                            if wait_i % 20 == 0 and wait_i > 0:
-                                xiaohongshu_logger.info(_msg("⏳", f"仍在等待验证完成...已等待{wait_i // 2}秒"))
-                        else:
-                            verification_waited = True
-
-                scheduled = self.publish_strategy == XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED
-                clicked = await self._click_publish_button(page, scheduled=scheduled)
-                if not clicked and publish_retry_count % 20 == 0:
-                    xiaohongshu_logger.warning(
-                        _msg("⚠️", f"未找到可点击的发布按钮（第{publish_retry_count}次）")
-                    )
-
-                await page.wait_for_url(
-                    XHS_PUBLISH_SUCCESS_URL_PATTERN,
-                    timeout=3000
-                )
-                xiaohongshu_logger.success(_msg("🥳", "视频发布成功，小人开心收工"))
-                break
-            except Exception:
-                if publish_retry_count % 10 == 0:
-                    xiaohongshu_logger.info(_msg("🏃", f"小人正在冲刺发布视频（第{publish_retry_count}次）"))
-                if self.debug and publish_retry_count <= 5:
-                    await page.screenshot(full_page=True)
-                await asyncio.sleep(0.5)
-        else:
-            xiaohongshu_logger.error(_msg("❌", f"发布超时：{max_publish_retries}次尝试后仍未成功"))
+        scheduled = self.publish_strategy == XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED
+        await self.publish_once_and_confirm(page, scheduled=scheduled)
 
     async def upload(self, playwright: Playwright) -> None:
         xiaohongshu_logger.info(_msg("🧍", "小人先检查 cookie、视频文件、封面和发布时间"))
         await self.validate_upload_args()
         xiaohongshu_logger.info(_msg("🥳", "上传前检查通过"))
-        browser = await playwright.chromium.launch(headless=self.headless, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=self.headless, channel="chrome")
         context = await browser.new_context(
             permissions=["geolocation"],
             storage_state=self.account_file,
@@ -880,7 +821,7 @@ class XiaoHongShuNote(XiaoHongShuBaseUploader):
         await page.goto(XHS_PUBLISH_NOTE_URL)
         await page.wait_for_url(XHS_PUBLISH_NOTE_URL)
 
-        upload_input = page.locator('input[type="file"][accept*="image"]').first
+        upload_input = page.locator('input[type="file"][accept*="image"],input[type="file"][accept*="png"],input[type="file"][accept*="jpg"]').first
         if not await upload_input.count():
             upload_input = page.locator("div[class^='upload-content'] input[class='upload-input']").first
 
@@ -910,73 +851,14 @@ class XiaoHongShuNote(XiaoHongShuBaseUploader):
         if self.publish_strategy == XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED and self.publish_date != 0:
             await self.set_schedule_time_xiaohongshu(page, self.publish_date)
 
-        max_publish_retries = 600
-        publish_retry_count = 0
-        verification_waited = False
-        while publish_retry_count < max_publish_retries:
-            publish_retry_count += 1
-            try:
-                # 检测验证码弹窗
-                if not verification_waited:
-                    verification_indicators = ['text="获取验证码"', 'text="请输入验证码"', 'text="安全验证"',
-                                               'text="请完成验证"', '[class*="captcha"]', '[class*="verify"]']
-                    has_verification = False
-                    for selector in verification_indicators:
-                        try:
-                            if await page.locator(selector).count() > 0:
-                                has_verification = True
-                                break
-                        except Exception:
-                            continue
-                    if has_verification:
-                        xiaohongshu_logger.warning(_msg("⚠️", "检测到验证弹窗！请在浏览器窗口中手动完成验证..."))
-                        xiaohongshu_logger.info(_msg("⏳", "等待手动验证完成（最多180秒）..."))
-                        for wait_i in range(360):
-                            await asyncio.sleep(0.5)
-                            still_has = False
-                            for selector in verification_indicators:
-                                try:
-                                    if await page.locator(selector).count() > 0:
-                                        still_has = True
-                                        break
-                                except Exception:
-                                    continue
-                            if not still_has:
-                                xiaohongshu_logger.success(_msg("✅", "验证已完成，继续发布流程"))
-                                verification_waited = True
-                                break
-                            if wait_i % 20 == 0 and wait_i > 0:
-                                xiaohongshu_logger.info(_msg("⏳", f"仍在等待验证完成...已等待{wait_i // 2}秒"))
-                        else:
-                            verification_waited = True
-
-                scheduled = self.publish_strategy == XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED
-                clicked = await self._click_publish_button(page, scheduled=scheduled)
-                if not clicked and publish_retry_count % 20 == 0:
-                    xiaohongshu_logger.warning(
-                        _msg("⚠️", f"未找到可点击的发布按钮（第{publish_retry_count}次）")
-                    )
-
-                await page.wait_for_url(
-                    XHS_PUBLISH_SUCCESS_URL_PATTERN,
-                    timeout=3000
-                )
-                xiaohongshu_logger.success(_msg("🥳", "图文发布成功，小人开心收工"))
-                break
-            except Exception:
-                if publish_retry_count % 10 == 0:
-                    xiaohongshu_logger.info(_msg("🏃", f"小人正在冲刺发布图文（第{publish_retry_count}次）"))
-                if self.debug and publish_retry_count <= 5:
-                    await page.screenshot(full_page=True)
-                await asyncio.sleep(0.5)
-        else:
-            xiaohongshu_logger.error(_msg("❌", f"发布超时：{max_publish_retries}次尝试后仍未成功"))
+        scheduled = self.publish_strategy == XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED
+        await self.publish_once_and_confirm(page, scheduled=scheduled)
 
     async def upload(self, playwright: Playwright) -> None:
         xiaohongshu_logger.info(_msg("🧍", "小人先检查 cookie、图片和发布时间"))
         await self.validate_upload_args()
         xiaohongshu_logger.info(_msg("🥳", "图文上传前检查通过"))
-        browser = await playwright.chromium.launch(headless=self.headless, channel="chrome")
+        browser = await launch_browser(playwright.chromium, headless=self.headless, channel="chrome")
         context = await browser.new_context(
             permissions=["geolocation"],
             storage_state=self.account_file,
@@ -998,3 +880,11 @@ class XiaoHongShuNote(XiaoHongShuBaseUploader):
 
     async def main(self):
         await self.xiaohongshu_upload_note()
+
+
+class VerificationRequiredError(RuntimeError):
+    pass
+
+
+class PublishResultUnknown(RuntimeError):
+    result_uncertain = True

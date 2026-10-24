@@ -28,6 +28,11 @@ export default defineConfig({
       }
     }
   },
+  // start.cmd opens the browser after both services are ready.
+  // Preview otherwise inherits server.open and opens a second tab.
+  preview: {
+    open: false,
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
