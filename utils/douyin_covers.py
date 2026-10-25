@@ -1,6 +1,20 @@
 """Select Douyin cover orientations by their visible labels, never DOM position."""
 import re
 
+async def find_cover_entry(page):
+    """Use the same visible, enabled entry for readiness and clicking."""
+    entries = page.get_by_text('选择封面', exact=True)
+    for index in range(await entries.count()):
+        entry = entries.nth(index)
+        if await entry.is_visible() and await entry.is_enabled():
+            blocked = await entry.evaluate(
+                "el=>!!el.closest('[aria-disabled=true],button:disabled,.semi-button-disabled')"
+            )
+            if not blocked:
+                return entry
+    return None
+
+
 async def upload_cover_for_orientation(page,modal,kind,path):
     patterns={
         'portrait':re.compile(r'竖(?:版)?封面|竖版|3\s*[:：/比]\s*4'),

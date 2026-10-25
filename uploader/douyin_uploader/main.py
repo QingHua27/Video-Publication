@@ -846,7 +846,16 @@ class DouYinVideo(DouYinBaseUploader):
             return
 
         douyin_logger.info(_msg("🏃", "小人正在设置视频封面"))
-        await page.click('text="选择封面"')
+        from utils.douyin_covers import find_cover_entry
+        entry = await find_cover_entry(page)
+        if entry is None:
+            raise RuntimeError('抖音封面入口尚未就绪，未执行发布')
+        try:
+            await entry.click(timeout=5000)
+        except Exception as error:
+            from utils.publish_diagnostics import capture_editor_failure
+            await capture_editor_failure(page, 'douyin', 'cover-entry')
+            raise RuntimeError('抖音封面入口无法点击，请检查页面弹窗；未执行发布') from error
         cover_locator_str = 'div[id*="creator-content-modal"]'
         cover_locator = page.locator(cover_locator_str).first
         await page.wait_for_selector(cover_locator_str)
@@ -872,6 +881,7 @@ class DouYinVideo(DouYinBaseUploader):
         needs_cover = bool(self.thumbnail_landscape_path or self.thumbnail_portrait_path)
         covers_ready = not needs_cover
         report_phase('cover','waiting' if needs_cover else 'skipped','等待封面入口' if needs_cover else '未指定封面，使用平台默认封面')
+        video_ready = False
         while asyncio.get_running_loop().time() < deadline:
             await report_upload_wait(page)
             failed = page.locator('div.progress-div > div:has-text("上传失败")')
@@ -882,18 +892,15 @@ class DouYinVideo(DouYinBaseUploader):
                 continue
             video_complete = page.locator('[class^="long-card"] div:has-text("重新上传")')
             video_ready = await video_complete.count() > 0 and await video_complete.first.is_visible()
-            if video_ready:report_phase('upload','completed','视频上传已完成',100)
+            if video_ready:
+                report_phase('upload','completed','视频上传已完成',100)
+                # A missing editor entry should not consume the 20-minute upload budget.
+                if not covers_ready:
+                    deadline = min(deadline, asyncio.get_running_loop().time() + 60)
             if not covers_ready:
-                entries = page.get_by_text('选择封面', exact=True)
-                available = False
-                for index in range(await entries.count()):
-                    entry = entries.nth(index)
-                    if await entry.is_visible() and await entry.is_enabled():
-                        blocked = await entry.evaluate("el=>!!el.closest('[aria-disabled=true],button:disabled,.semi-button-disabled')")
-                        if not blocked:
-                            available = True
-                            break
-                if available or video_ready:
+                from utils.douyin_covers import find_cover_entry
+                entry = await find_cover_entry(page)
+                if entry is not None:
                     douyin_logger.info(_msg('🖼️', '封面入口已可用，提前设置封面并等待处理完成'))
                     # Keep one owner for all UI actions; video transfer continues
                     # independently. Exceptions must stop publication, not be swallowed.
@@ -911,6 +918,12 @@ class DouYinVideo(DouYinBaseUploader):
                 report_phase('preparation','completed','视频和封面均已就绪',overall_progress=70)
                 return
             await asyncio.sleep(poll_interval)
+        if not covers_ready and video_ready:
+            from utils.publish_diagnostics import capture_editor_failure
+            await capture_editor_failure(page, 'douyin', 'cover-entry')
+            message = '抖音视频已上传，但封面入口未就绪或不可用，请检查发布页；未执行发布'
+            report_phase('cover', 'failed', message)
+            raise RuntimeError(message)
         report_phase('upload','failed','抖音视频上传超时，未执行发布')
         raise RuntimeError('抖音视频上传超时，未执行发布')
 

@@ -51,3 +51,34 @@ class EarlyDouyinCovers(unittest.IsolatedAsyncioTestCase):
   await self.page.set_content('<div class="long-card-test"></div>')
   self.app.thumbnail_landscape_path='';self.app.thumbnail_portrait_path=''
   with self.assertRaisesRegex(RuntimeError,'视频上传超时'):await self.app.prepare_video_and_covers(self.page,timeout=.15,poll_interval=.03)
+
+ async def test_video_ready_does_not_click_missing_cover_entry(self):
+  await self.page.set_content('<div class="long-card-test"><div>重新上传</div></div>')
+  calls=[]
+  async def cover(page):calls.append(1)
+  self.app.set_thumbnail=cover
+  with self.assertRaisesRegex(RuntimeError,'封面入口'):
+   await self.app.prepare_video_and_covers(self.page,timeout=.15,poll_interval=.03)
+  self.assertEqual(calls,[])
+ async def test_hidden_duplicate_does_not_steal_cover_click(self):
+  from utils.douyin_covers import find_cover_entry
+  await self.page.set_content('<button style="display:none">选择封面</button><button onclick="this.dataset.clicked=1">选择封面</button>')
+  entry=await find_cover_entry(self.page)
+  await entry.click(timeout=500)
+  self.assertEqual(await self.page.locator('button').last.get_attribute('data-clicked'),'1')
+
+ async def test_video_ready_waits_for_late_cover_entry(self):
+  await self.page.set_content('<div class="long-card-test"><div>重新上传</div></div>')
+  calls=[]
+  async def cover(page):
+   self.assertEqual(await page.get_by_text('选择封面',exact=True).count(),1)
+   calls.append(1)
+  self.app.set_thumbnail=cover
+  async def show_entry():
+   await self.page.wait_for_timeout(120)
+   self.assertFalse(calls)
+   await self.page.evaluate("document.body.insertAdjacentHTML('beforeend','<button>选择封面</button>')")
+  task=asyncio.create_task(show_entry())
+  await self.app.prepare_video_and_covers(self.page,timeout=3,poll_interval=.03)
+  await task
+  self.assertEqual(calls,[1])
