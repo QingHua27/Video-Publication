@@ -23,6 +23,7 @@ export const useAccountStore = defineStore('account', () => {
     type: item[1],
     filePath: item[2],
     name: item[3],
+    remark: item[5] || '',
     status: item[4] === -1 ? '验证中' : (item[4] === 1 ? '正常' : '异常'),
     platform: PLATFORM_TYPES[item[1]] || '未知'
   })

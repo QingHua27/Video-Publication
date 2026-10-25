@@ -1,3 +1,4 @@
+from utils.account_identity import LoginLabel, account_remarks
 import asyncio
 import json
 import os
@@ -366,13 +367,14 @@ def register_local_materials():
 def getAccounts():
     """快速获取所有账号信息，不进行cookie验证"""
     try:
-        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+        with closing(sqlite3.connect(Path(BASE_DIR / "db" / "database.db"))) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
             SELECT * FROM user_info''')
             rows = cursor.fetchall()
-            rows_list = [list(row) for row in rows]
+            remarks = account_remarks(conn)
+            rows_list = [list(row) + [remarks.get(row[0], '')] for row in rows]
 
             print("\n📋 当前数据表内容（快速获取）：")
             for row in rows:
@@ -431,7 +433,8 @@ async def getValidAccounts():
         else:
             cursor.execute('SELECT * FROM user_info')
         rows = cursor.fetchall()
-        rows_list = [list(row) for row in rows]
+        remarks = account_remarks(conn)
+        rows_list = [list(row) + [remarks.get(row[0], '')] for row in rows]
         scope = f"type={platform_type}" if platform_type is not None else "all"
         print(f"\n📋 校验账号 ({scope})，共 {len(rows_list)} 条：")
         for row in rows:
@@ -582,20 +585,22 @@ def login():
     # 1 小红书 2 视频号 3 抖音 4 快手 5 百家号 6 B站 7 今日头条
     type = request.args.get('type')
     # 账号名
-    id = request.args.get('id')
+    id = LoginLabel(request.args.get('id', ''), request.args.get('accountId', type=int))
     print(f"登录请求: type={type}, id={id}")
 
     # 模拟一个用于异步通信的队列
     status_queue = Queue()
-    active_queues[id] = status_queue
+    queue_key = uuid.uuid4().hex
+    active_queues[queue_key] = status_queue
 
     def on_close():
         print(f"清理队列: {id}")
-        del active_queues[id]
+        active_queues.pop(queue_key, None)
     # 启动异步任务线程
     thread = threading.Thread(target=run_async_function, args=(type,id,status_queue), daemon=True)
     thread.start()
     response = Response(sse_stream(status_queue,), mimetype='text/event-stream')
+    response.call_on_close(on_close)
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['X-Accel-Buffering'] = 'no'  # 关键：禁用 Nginx 缓冲
     response.headers['Content-Type'] = 'text/event-stream'
@@ -1069,9 +1074,12 @@ def updateUserinfo():
     userName = data.get('userName')
     try:
         # 获取数据库连接
-        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+        with closing(sqlite3.connect(Path(BASE_DIR / "db" / "database.db"))) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
+
+            account_remarks(conn)
+            conn.execute('INSERT OR REPLACE INTO account_remarks(account_id,remark) VALUES(?,?)', (user_id, str(data.get('remark') or '')[:100]))
 
             # 更新数据库记录
             cursor.execute('''

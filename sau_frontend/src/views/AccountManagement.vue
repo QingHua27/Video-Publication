@@ -30,7 +30,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -103,7 +104,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -176,7 +178,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -249,7 +252,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -322,7 +326,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -395,7 +400,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -468,7 +474,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -541,7 +548,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -614,7 +622,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -687,7 +696,8 @@
                     <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="name" label="平台用户名" min-width="180" />
+                <el-table-column prop="remark" label="备注" min-width="120" />
                 <el-table-column prop="platform" label="平台">
                   <template #default="scope">
                     <el-tag
@@ -766,14 +776,18 @@
             <el-option label="知乎" value="知乎" />
           </el-select>
         </el-form-item>
-        <el-form-item label="名称" prop="name">
+        <el-form-item v-if="dialogType === 'edit'" label="用户名" prop="name">
           <el-input 
             v-model="accountForm.name" 
-            placeholder="请输入账号名称" 
+            placeholder="扫码后自动获取，未识别时可补填"
             :disabled="sseConnecting"
           />
         </el-form-item>
         
+        <el-form-item label="备注名">
+          <el-input v-model="accountForm.remark" placeholder="选填，方便区分账号" maxlength="100" :disabled="sseConnecting" />
+        </el-form-item>
+        <p v-if="dialogType === 'add'">扫码成功后自动获取平台用户名</p>
         <!-- 二维码显示区域 -->
         <div v-if="sseConnecting" class="qrcode-container">
           <div v-if="qrCodeData && !loginStatus" class="qrcode-wrapper">
@@ -979,7 +993,7 @@ const handleStatusClick = (row) => {
 const filteredAccounts = computed(() => {
   if (!searchKeyword.value) return accountStore.accounts
   return accountStore.accounts.filter(account =>
-    account.name.includes(searchKeyword.value)
+    (account.name.includes(searchKeyword.value) || (account.remark || '').includes(searchKeyword.value))
   )
 })
 
@@ -1034,6 +1048,7 @@ const accountFormRef = ref(null)
 const accountForm = reactive({
   id: null,
   name: '',
+  remark: '',
   platform: '',
   status: '正常'
 })
@@ -1041,7 +1056,7 @@ const accountForm = reactive({
 // 表单验证规则
 const rules = {
   platform: [{ required: true, message: '请选择平台', trigger: 'change' }],
-  name: [{ required: true, message: '请输入账号名称', trigger: 'blur' }]
+  name: []
 }
 
 // SSE连接状态
@@ -1058,6 +1073,7 @@ const handleAddAccount = () => {
   Object.assign(accountForm, {
     id: null,
     name: '',
+    remark: '',
     platform: '',
     status: '正常'
   })
@@ -1074,6 +1090,7 @@ const handleEdit = (row) => {
   Object.assign(accountForm, {
     id: row.id,
     name: row.name,
+    remark: row.remark || '',
     platform: row.platform,
     status: row.status
   })
@@ -1182,6 +1199,7 @@ const handleReLogin = (row) => {
   Object.assign(accountForm, {
     id: row.id,
     name: row.name,
+    remark: row.remark || '',
     platform: row.platform,
     status: row.status
   })
@@ -1196,7 +1214,7 @@ const handleReLogin = (row) => {
 
   // 立即开始登录流程
   setTimeout(() => {
-    connectSSE(row.platform, row.name)
+    connectSSE(row.platform, row.remark || '', row.id)
   }, 300)
 }
 
@@ -1243,7 +1261,7 @@ const closeSSEConnection = () => {
 }
 
 // 建立SSE连接
-const connectSSE = (platform, name) => {
+const connectSSE = (platform, remark, accountId = null) => {
   // 关闭可能存在的连接
   closeSSEConnection()
 
@@ -1281,7 +1299,7 @@ const connectSSE = (platform, name) => {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5409'
   // Vite 开发代理会缓冲 SSE 长连接，登录流直接连接后端端口
   const sseBaseUrl = baseUrl.startsWith('/') ? 'http://localhost:5409' : baseUrl
-  const url = `${sseBaseUrl}/login?type=${type}&id=${encodeURIComponent(name)}`
+  const url = `${sseBaseUrl}/login?type=${type}&id=${encodeURIComponent(remark || '')}${accountId ? `&accountId=${accountId}` : ''}`
 
   eventSource = new EventSource(url)
 
@@ -1380,7 +1398,7 @@ const submitAccountForm = () => {
     if (valid) {
       if (dialogType.value === 'add') {
         // 建立SSE连接
-        connectSSE(accountForm.platform, accountForm.name)
+        connectSSE(accountForm.platform, accountForm.remark)
       } else {
         // 编辑账号逻辑
         try {
@@ -1401,13 +1419,15 @@ const submitAccountForm = () => {
           const res = await accountApi.updateAccount({
             id: accountForm.id,
             type: type,
-            userName: accountForm.name
+            userName: accountForm.name,
+            remark: accountForm.remark
           })
           if (res.code === 200) {
             // 更新状态管理中的账号
             const updatedAccount = {
               id: accountForm.id,
               name: accountForm.name,
+              remark: accountForm.remark,
               platform: accountForm.platform,
               status: accountForm.status // Keep the existing status
             };

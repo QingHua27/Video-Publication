@@ -1,3 +1,4 @@
+from utils.account_identity import read_username, save_account, bili_username, is_channels_platform_url
 from utils.channels_session import exclusive_channels
 import asyncio
 import sqlite3
@@ -94,6 +95,7 @@ async def douyin_cookie_gen(id,status_queue):
         # 确保cookiesFile目录存在
         cookies_dir = Path(BASE_DIR / "cookiesFile")
         cookies_dir.mkdir(exist_ok=True)
+        username = await read_username(page, 3)
         await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
         result = await check_cookie(3, f"{uuid_v1}.json")
         if not result:
@@ -107,10 +109,7 @@ async def douyin_cookie_gen(id,status_queue):
         await browser.close()
         with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                                INSERT INTO user_info (type, filePath, userName, status)
-                                VALUES (?, ?, ?, ?)
-                                ''', (3, f"{uuid_v1}.json", id, 1))
+            save_account(conn, 3, f"{uuid_v1}.json", username, id, 1)
             conn.commit()
             print("✅ 用户状态已记录")
         status_queue.put("200")
@@ -157,7 +156,7 @@ async def get_tencent_cookie(id,status_queue):
             try:
                 # Only the real platform redirect establishes a usable login session.
                 # Intermediate login redirects must not start a shorter second timeout.
-                await page.wait_for_url("**/platform/**", wait_until="commit", timeout=200_000)
+                await page.wait_for_url(is_channels_platform_url, wait_until="commit", timeout=200_000)
                 await page.wait_for_timeout(2000)
             except (asyncio.TimeoutError, PlaywrightTimeoutError):
                 status_queue.put("500")
@@ -168,18 +167,16 @@ async def get_tencent_cookie(id,status_queue):
             # 确保cookiesFile目录存在
             cookies_dir = Path(BASE_DIR / "cookiesFile")
             cookies_dir.mkdir(exist_ok=True)
+            username = await read_username(page, 2)
             await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
-            result = "/platform/" in page.url
+            result = is_channels_platform_url(page.url)
             if not result:
                 status_queue.put("500")
                 return None
 
             with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                                    INSERT INTO user_info (type, filePath, userName, status)
-                                    VALUES (?, ?, ?, ?)
-                                    ''', (2, f"{uuid_v1}.json", id, 1))
+                save_account(conn, 2, f"{uuid_v1}.json", username, id, 1)
                 conn.commit()
                 print("✅ 用户状态已记录")
             status_queue.put("200")
@@ -247,6 +244,7 @@ async def get_ks_cookie(id,status_queue):
         # 确保cookiesFile目录存在
         cookies_dir = Path(BASE_DIR / "cookiesFile")
         cookies_dir.mkdir(exist_ok=True)
+        username = await read_username(page, 4)
         await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
         result = await check_cookie(4, f"{uuid_v1}.json")
         if not result:
@@ -261,10 +259,7 @@ async def get_ks_cookie(id,status_queue):
 
         with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                                        INSERT INTO user_info (type, filePath, userName, status)
-                                        VALUES (?, ?, ?, ?)
-                                        ''', (4, f"{uuid_v1}.json", id, 1))
+            save_account(conn, 4, f"{uuid_v1}.json", username, id, 1)
             conn.commit()
             print("✅ 用户状态已记录")
         status_queue.put("200")
@@ -327,6 +322,7 @@ async def xiaohongshu_cookie_gen(id,status_queue):
         # 确保cookiesFile目录存在
         cookies_dir = Path(BASE_DIR / "cookiesFile")
         cookies_dir.mkdir(exist_ok=True)
+        username = await read_username(page, 1)
         await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
         result = await check_cookie(1, f"{uuid_v1}.json")
         if not result:
@@ -341,10 +337,7 @@ async def xiaohongshu_cookie_gen(id,status_queue):
 
         with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                           INSERT INTO user_info (type, filePath, userName, status)
-                           VALUES (?, ?, ?, ?)
-                           ''', (1, f"{uuid_v1}.json", id, 1))
+            save_account(conn, 1, f"{uuid_v1}.json", username, id, 1)
             conn.commit()
             print("✅ 用户状态已记录")
         status_queue.put("200")
@@ -385,6 +378,7 @@ async def baijiahao_cookie_gen(id, status_queue):
             print(f"UUID v1: {uuid_v1}")
             cookies_dir = Path(BASE_DIR / "cookiesFile")
             cookies_dir.mkdir(exist_ok=True)
+            username = await read_username(page, 5)
             await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
 
             result = await check_cookie(5, f"{uuid_v1}.json")
@@ -393,10 +387,7 @@ async def baijiahao_cookie_gen(id, status_queue):
 
             with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO user_info (type, filePath, userName, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (5, f"{uuid_v1}.json", id, 1 if result else 0))
+                save_account(conn, 5, f"{uuid_v1}.json", username, id, 1 if result else 0)
                 conn.commit()
                 print("✅ 百家号用户状态已记录")
             status_queue.put("200")
@@ -465,6 +456,7 @@ async def toutiao_cookie_gen(id, status_queue):
             print(f"UUID v1: {uuid_v1}")
             cookies_dir = Path(BASE_DIR / "cookiesFile")
             cookies_dir.mkdir(exist_ok=True)
+            username = await read_username(page, 7)
             await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
 
             # cookie 校验失败也不要卡死前端；仍写入账号，状态后续可再验证
@@ -474,10 +466,7 @@ async def toutiao_cookie_gen(id, status_queue):
 
             with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO user_info (type, filePath, userName, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (7, f"{uuid_v1}.json", id, 1 if result else 0))
+                save_account(conn, 7, f"{uuid_v1}.json", username, id, 1 if result else 0)
                 conn.commit()
                 print("✅ 今日头条用户状态已记录")
             status_queue.put("200")
@@ -546,6 +535,7 @@ async def sohu_cookie_gen(id, status_queue):
             print(f"UUID v1: {uuid_v1}")
             cookies_dir = Path(BASE_DIR / "cookiesFile")
             cookies_dir.mkdir(exist_ok=True)
+            username = await read_username(page, 8)
             await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
 
             result = await check_cookie(8, f"{uuid_v1}.json")
@@ -554,10 +544,7 @@ async def sohu_cookie_gen(id, status_queue):
 
             with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO user_info (type, filePath, userName, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (8, f"{uuid_v1}.json", id, 1 if result else 0))
+                save_account(conn, 8, f"{uuid_v1}.json", username, id, 1 if result else 0)
                 conn.commit()
                 print("✅ 搜狐号用户状态已记录")
             status_queue.put("200")
@@ -620,6 +607,7 @@ async def zhihu_cookie_gen(id, status_queue):
             print(f"UUID v1: {uuid_v1}")
             cookies_dir = Path(BASE_DIR / "cookiesFile")
             cookies_dir.mkdir(exist_ok=True)
+            username = await read_username(page, 9)
             await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
 
             result = await check_cookie(9, f"{uuid_v1}.json")
@@ -628,10 +616,7 @@ async def zhihu_cookie_gen(id, status_queue):
 
             with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO user_info (type, filePath, userName, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (9, f"{uuid_v1}.json", id, 1 if result else 0))
+                save_account(conn, 9, f"{uuid_v1}.json", username, id, 1 if result else 0)
                 conn.commit()
                 print("✅ 知乎用户状态已记录")
             status_queue.put("200")
@@ -687,12 +672,7 @@ async def bilibili_cookie_gen(id, status_queue):
             status_queue.put('500')
             return
         with closing(sqlite3.connect(Path(BASE_DIR / 'db' / 'database.db'))) as conn:
-            existing = conn.execute('SELECT id FROM user_info WHERE type = ? AND userName = ?', (6, id)).fetchone()
-            if existing:
-                conn.execute('UPDATE user_info SET filePath = ?, status = 1 WHERE id = ?', (account_filename, existing[0]))
-            else:
-                conn.execute('INSERT INTO user_info (type, filePath, userName, status) VALUES (?, ?, ?, ?)',
-                             (6, account_filename, id, 1))
+            save_account(conn, 6, account_filename, bili_username(account_file), id, 1)
             conn.commit()
         print('✅ Bilibili登录成功')
         status_queue.put('200')

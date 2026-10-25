@@ -59,7 +59,9 @@ class _FakePage:
 
     async def wait_for_url(self,pattern,**kwargs):
         self.waited_url = (pattern, kwargs)
-        self.url="https://channels.weixin.qq.com/platform/home"
+        self.url="https://channels.weixin.qq.com/platform"
+        if callable(pattern) and not pattern(self.url):
+            raise AssertionError('bare platform landing must be accepted')
 
     async def wait_for_timeout(self,milliseconds):
         pass
@@ -159,11 +161,15 @@ class TencentLoginTests(unittest.TestCase):
         self.assertIn('--window-size=1440,960', fake_playwright.chromium.launch_options['args'])
         self.assertIn('login', fake_playwright.chromium.browser.context.page.qr_frame_selector)
         pattern, options = fake_playwright.chromium.browser.context.page.waited_url
-        self.assertEqual(pattern, '**/platform/**')
+        self.assertTrue(callable(pattern))
+        self.assertTrue(pattern('https://channels.weixin.qq.com/platform'))
+        self.assertTrue(pattern('https://channels.weixin.qq.com/platform/home'))
+        self.assertFalse(pattern('https://channels.weixin.qq.com/login.html'))
+        self.assertFalse(pattern('https://example.com/platform'))
         self.assertEqual(options['timeout'], 200_000)
         self.assertEqual(queue.get_nowait(), "https://open.weixin.qq.com/connect/qrcode/qr")
         self.assertEqual(queue.get_nowait(), "200")
-        conn.cursor.assert_called_once()
+        conn.commit.assert_called_once()
 
 
 if __name__ == "__main__":

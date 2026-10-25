@@ -90,23 +90,24 @@ class BilibiliWebLoginTests(unittest.TestCase):
             conn.close()
 
             async def verified_login(binary, account_file, queue, session_root):
-                account_file.write_text('{}')
+                account_file.write_text('{"user_info":{"name":"平台昵称"}}', encoding='utf-8')
                 queue.put('data:image/png;base64,test')
                 return True
 
-            for _ in range(2):
+            for attempt in range(2):
                 queue = Queue()
                 with patch.object(login, 'BASE_DIR', root), \
                      patch('uploader.bilibili_uploader.runtime.ensure_biliup_binary', return_value=Path('biliup.exe')), \
                      patch('utils.bilibili_web_login.collect_login_qrcode', side_effect=verified_login), \
                      patch.object(login, 'run_biliup_command', return_value=SimpleNamespace(returncode=0)):
-                    asyncio.run(login.bilibili_cookie_gen('test-account', queue))
+                    from utils.account_identity import LoginLabel
+                    asyncio.run(login.bilibili_cookie_gen(LoginLabel('test-account', 1 if attempt else None), queue))
                 self.assertEqual(list(queue.queue), ['data:image/png;base64,test', '200'])
             with sqlite3.connect(root / 'db/database.db') as conn:
                 rows = conn.execute('SELECT type, filePath, userName, status FROM user_info').fetchall()
             conn.close()
             self.assertEqual(len(rows), 1)
-            self.assertEqual((rows[0][0], rows[0][2], rows[0][3]), (6, 'test-account', 1))
+            self.assertEqual((rows[0][0], rows[0][2], rows[0][3]), (6, '平台昵称', 1))
             self.assertTrue((root / 'cookiesFile' / rows[0][1]).is_file())
 
     def test_web_login_timeout_emits_failure_without_success(self):
