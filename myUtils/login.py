@@ -121,11 +121,12 @@ async def douyin_cookie_gen(id,status_queue):
 async def get_tencent_cookie(id,status_queue):
     async with async_playwright() as playwright:
         options = get_browser_options()
+        options['headless'] = True  # QR is displayed in the system page
         options['args'] = [*options.get('args', []), '--window-size=1440,960']
         # Make sure to run headed.
         browser = await playwright.chromium.launch(**options)
         # Setup context however you like.
-        context = await browser.new_context(viewport=None)  # Match the maximized native window
+        context = await browser.new_context(viewport={'width': 1440, 'height': 900})
         # Pause the page, and start recording manually.
         context = await set_init_script(context)
         page = await context.new_page()

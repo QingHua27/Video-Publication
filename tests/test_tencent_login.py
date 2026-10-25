@@ -142,8 +142,8 @@ class TencentLoginTests(unittest.TestCase):
                 asyncio.run(login.get_tencent_cookie("测试视频号", queue))
 
         self.assertEqual(fake_playwright.chromium.launch_options["executable_path"], "C:/Chrome/chrome.exe")
-        self.assertFalse(fake_playwright.chromium.launch_options["headless"])
-        self.assertIsNone(fake_playwright.chromium.browser.context_options['viewport'])
+        self.assertTrue(fake_playwright.chromium.launch_options["headless"])
+        self.assertEqual(fake_playwright.chromium.browser.context_options['viewport'], {'width': 1440, 'height': 900})
         self.assertIn('--window-size=1440,960', fake_playwright.chromium.launch_options['args'])
         pattern, options = fake_playwright.chromium.browser.context.page.waited_url
         self.assertEqual(pattern, '**/platform/**')
