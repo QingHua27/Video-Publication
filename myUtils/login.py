@@ -119,18 +119,13 @@ async def douyin_cookie_gen(id,status_queue):
 # 视频号登录
 @exclusive_channels('扫码登录')
 async def get_tencent_cookie(id,status_queue):
-    url_changed_event = asyncio.Event()
-    async def on_url_change():
-        # 检查是否是主框架的变化
-        if page.url != original_url:
-            url_changed_event.set()
-
     async with async_playwright() as playwright:
         options = get_browser_options()
+        options['args'] = [*options.get('args', []), '--window-size=1440,960']
         # Make sure to run headed.
         browser = await playwright.chromium.launch(**options)
         # Setup context however you like.
-        context = await browser.new_context()  # Pass any options
+        context = await browser.new_context(viewport=None)  # Match the maximized native window
         # Pause the page, and start recording manually.
         context = await set_init_script(context)
         page = await context.new_page()
@@ -139,12 +134,6 @@ async def get_tencent_cookie(id,status_queue):
             wait_until="commit",
             timeout=60_000,
         )
-        original_url = page.url
-
-        # 监听页面的 'framenavigated' 事件，只关注主框架的变化
-        page.on('framenavigated',
-                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
-
         # 等待 iframe 和二维码出现，避免页面刚打开时取到空元素
         iframe_element = page.locator("iframe").first
         await iframe_element.wait_for(state="attached", timeout=60_000)
@@ -164,22 +153,13 @@ async def get_tencent_cookie(id,status_queue):
         status_queue.put(src)
 
         try:
-            # 等待 URL 变化或超时
-            await asyncio.wait_for(url_changed_event.wait(), timeout=200)  # 最多等待 200 秒
-            print("监听页面跳转成功")
-            # 扫码确认后先跳 login.html 做票据交换，再重定向进 /platform/ 并种下会话 cookie；
-            # 必须等真正进入平台页再保存 storage_state，否则存出的是无效会话
-            try:
-                # 只等导航提交（commit）即可，会话 cookie 随跳转响应种下；
-                # 默认等 load 会因创作者后台资源加载慢而误超时
-                await page.wait_for_url("**/platform/**", wait_until="commit", timeout=30_000)
-                print("✅ 已进入创作者平台，会话已建立")
-                await page.wait_for_timeout(2000)  # 留点时间让 cookie 完全落定
-            except (asyncio.TimeoutError, PlaywrightTimeoutError):
-                print(f"⚠️ 扫码后未进入 /platform/，当前 URL: {page.url}")
-        except asyncio.TimeoutError:
+            # Only the real platform redirect establishes a usable login session.
+            # Intermediate login redirects must not start a shorter second timeout.
+            await page.wait_for_url("**/platform/**", wait_until="commit", timeout=200_000)
+            await page.wait_for_timeout(2000)
+        except (asyncio.TimeoutError, PlaywrightTimeoutError):
             status_queue.put("500")
-            print("监听页面跳转超时")
+            print("视频号扫码登录超时：尚未进入创作者后台")
             await page.close()
             await context.close()
             await browser.close()

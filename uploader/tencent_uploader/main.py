@@ -366,8 +366,11 @@ async def tencent_cookie_gen(
     Path(account_file).parent.mkdir(parents=True, exist_ok=True)
 
     async with async_playwright() as playwright:
-        browser = await launch_browser(playwright.chromium, **_build_launch_kwargs(headless=headless))
-        context = await browser.new_context()
+        options = _build_launch_kwargs(headless=headless)
+        if not headless:
+            options['args'] = [*options.get('args', []), '--start-maximized', '--window-size=1440,960']
+        browser = await launch_browser(playwright.chromium, **options)
+        context = await browser.new_context(**({'viewport': {'width': 1440, 'height': 900}} if headless else {'viewport': None}))
         qrcode_path = None
         result = _build_login_result(False, "failed", "视频号登录失败", account_file)
         try:

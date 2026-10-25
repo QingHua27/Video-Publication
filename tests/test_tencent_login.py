@@ -40,6 +40,7 @@ class _FakePage:
     def __init__(self):
         self.url = "about:blank"
         self.main_frame = object()
+        self.waited_url = None
         self.frame = _FakeFrameLocator()
 
     async def goto(self, url, **kwargs):
@@ -56,6 +57,7 @@ class _FakePage:
         return self.frame
 
     async def wait_for_url(self,pattern,**kwargs):
+        self.waited_url = (pattern, kwargs)
         self.url="https://channels.weixin.qq.com/platform/home"
 
     async def wait_for_timeout(self,milliseconds):
@@ -83,7 +85,8 @@ class _FakeBrowser:
     def __init__(self):
         self.context = _FakeContext()
 
-    async def new_context(self):
+    async def new_context(self, **options):
+        self.context_options = options
         return self.context
 
     async def close(self):
@@ -140,6 +143,11 @@ class TencentLoginTests(unittest.TestCase):
 
         self.assertEqual(fake_playwright.chromium.launch_options["executable_path"], "C:/Chrome/chrome.exe")
         self.assertFalse(fake_playwright.chromium.launch_options["headless"])
+        self.assertIsNone(fake_playwright.chromium.browser.context_options['viewport'])
+        self.assertIn('--window-size=1440,960', fake_playwright.chromium.launch_options['args'])
+        pattern, options = fake_playwright.chromium.browser.context.page.waited_url
+        self.assertEqual(pattern, '**/platform/**')
+        self.assertEqual(options['timeout'], 200_000)
         self.assertEqual(queue.get_nowait(), "https://open.weixin.qq.com/connect/qrcode/qr")
         self.assertEqual(queue.get_nowait(), "200")
         conn.cursor.assert_called_once()
