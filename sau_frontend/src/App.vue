@@ -1,6 +1,6 @@
 <template>
   <div id="app" class="monochrome-shell reference-shell" :class="{'publish-shell':route.path === '/publish-center'}" :style="{'--publish-sidebar-width':`${sidebarWidth}px`}">
-    <el-container>
+    <el-container v-if="!exitScreen">
       <el-aside :width="`${sidebarWidth}px`">
         <div class="sidebar">
           <div class="logo">
@@ -64,7 +64,7 @@
         </el-main>
       </el-container>
     </el-container>
-    <div v-if="themeId==='botanical'" class="botanical-art-overlay" aria-hidden="true"><i class="botanical-art-left"/><i class="botanical-art-top"/><i class="botanical-art-right"/></div>
+    <div v-if="!exitScreen && themeId==='botanical'" class="botanical-art-overlay" aria-hidden="true"><i class="botanical-art-left"/><i class="botanical-art-top"/><i class="botanical-art-right"/></div>
     <div v-if="exitScreen" class="exit-screen" role="status" aria-live="polite"><div class="exit-screen-content">
       <el-icon class="exit-screen-icon"><SwitchButton /></el-icon>
       <h1>{{ exitDisconnected ? '已退出' : '正在退出…' }}</h1>
