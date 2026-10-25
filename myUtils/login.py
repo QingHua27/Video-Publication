@@ -123,74 +123,71 @@ async def get_tencent_cookie(id,status_queue):
         options = get_browser_options()
         options['headless'] = True  # QR is displayed in the system page
         options['args'] = [*options.get('args', []), '--window-size=1440,960']
-        # Make sure to run headed.
+        # The QR is streamed to the account dialog.
         browser = await playwright.chromium.launch(**options)
-        # Setup context however you like.
-        context = await browser.new_context(viewport={'width': 1440, 'height': 900})
-        # Pause the page, and start recording manually.
-        context = await set_init_script(context)
-        page = await context.new_page()
-        await page.goto(
-            "https://channels.weixin.qq.com",
-            wait_until="commit",
-            timeout=60_000,
-        )
-        # 等待 iframe 和二维码出现，避免页面刚打开时取到空元素
-        iframe_element = page.locator("iframe").first
-        await iframe_element.wait_for(state="attached", timeout=60_000)
-        iframe_locator = page.frame_locator("iframe").first
-
-        # 获取 iframe 中的第一个 img 元素
-        img_locator = iframe_locator.get_by_role("img").first
-        await img_locator.wait_for(state="visible", timeout=60_000)
-
-        # 获取 src 属性值
-        src = await img_locator.get_attribute("src")
-        if not src:
-            raise RuntimeError("视频号登录二维码未加载")
-        if src.startswith("/"):
-            src = f"https://open.weixin.qq.com{src}"
-        print("✅ 图片地址:", src)
-        status_queue.put(src)
-
         try:
-            # Only the real platform redirect establishes a usable login session.
-            # Intermediate login redirects must not start a shorter second timeout.
-            await page.wait_for_url("**/platform/**", wait_until="commit", timeout=200_000)
-            await page.wait_for_timeout(2000)
-        except (asyncio.TimeoutError, PlaywrightTimeoutError):
-            status_queue.put("500")
-            print("视频号扫码登录超时：尚未进入创作者后台")
-            await page.close()
-            await context.close()
-            await browser.close()
-            return None
-        uuid_v1 = uuid.uuid1()
-        print(f"UUID v1: {uuid_v1}")
-        # 确保cookiesFile目录存在
-        cookies_dir = Path(BASE_DIR / "cookiesFile")
-        cookies_dir.mkdir(exist_ok=True)
-        await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
-        result = "/platform/" in page.url
-        if not result:
-            status_queue.put("500")
-            await page.close()
-            await context.close()
-            await browser.close()
-            return None
-        await page.close()
-        await context.close()
-        await browser.close()
+            # Setup context however you like.
+            context = await browser.new_context(viewport={'width': 1440, 'height': 900})
+            # Pause the page, and start recording manually.
+            context = await set_init_script(context)
+            page = await context.new_page()
+            await page.goto(
+                "https://channels.weixin.qq.com",
+                wait_until="commit",
+                timeout=60_000,
+            )
+            # Prefer the login frame instead of a tracking/help iframe.
+            login_frame = 'iframe[src*="login"], iframe[src*="open.weixin.qq.com"]'
+            iframe_element = page.locator(login_frame).first
+            try:
+                await iframe_element.wait_for(state="attached", timeout=15_000)
+                iframe_locator = page.frame_locator(login_frame).first
+            except PlaywrightTimeoutError:
+                iframe_locator = page.frame_locator("iframe").first
+            img_locator = iframe_locator.get_by_role("img").first
+            await img_locator.wait_for(state="visible", timeout=30_000)
+            src = await wait_for_qr_src(img_locator, timeout_s=15)
+            if not src:
+                raise RuntimeError("视频号登录二维码未加载，请重试")
+            if src.startswith("/"):
+                src = f"https://open.weixin.qq.com{src}"
+            print("✅ 图片地址:", src)
+            status_queue.put(src)
 
-        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                                INSERT INTO user_info (type, filePath, userName, status)
-                                VALUES (?, ?, ?, ?)
-                                ''', (2, f"{uuid_v1}.json", id, 1))
-            conn.commit()
-            print("✅ 用户状态已记录")
-        status_queue.put("200")
+            try:
+                # Only the real platform redirect establishes a usable login session.
+                # Intermediate login redirects must not start a shorter second timeout.
+                await page.wait_for_url("**/platform/**", wait_until="commit", timeout=200_000)
+                await page.wait_for_timeout(2000)
+            except (asyncio.TimeoutError, PlaywrightTimeoutError):
+                status_queue.put("500")
+                print("视频号扫码登录超时：尚未进入创作者后台")
+                return None
+            uuid_v1 = uuid.uuid1()
+            print(f"UUID v1: {uuid_v1}")
+            # 确保cookiesFile目录存在
+            cookies_dir = Path(BASE_DIR / "cookiesFile")
+            cookies_dir.mkdir(exist_ok=True)
+            await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
+            result = "/platform/" in page.url
+            if not result:
+                status_queue.put("500")
+                return None
+
+            with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                                    INSERT INTO user_info (type, filePath, userName, status)
+                                    VALUES (?, ?, ?, ?)
+                                    ''', (2, f"{uuid_v1}.json", id, 1))
+                conn.commit()
+                print("✅ 用户状态已记录")
+            status_queue.put("200")
+        except Exception as error:
+            print(f"视频号登录未完成: {error}", flush=True)
+            status_queue.put("500")
+        finally:
+            await browser.close()
 
 # 快手登录
 async def get_ks_cookie(id,status_queue):

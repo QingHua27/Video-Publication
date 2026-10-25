@@ -12,7 +12,7 @@ class _FakeImage:
     async def wait_for(self, state=None, timeout=None):
         pass
 
-    async def get_attribute(self, name):
+    async def get_attribute(self, name, **kwargs):
         self.requested_attribute = name
         return "/connect/qrcode/qr"
 
@@ -51,6 +51,7 @@ class _FakePage:
         callback(self.main_frame)
 
     def frame_locator(self, selector):
+        self.qr_frame_selector = selector
         return self.frame
 
     def locator(self, selector):
@@ -127,6 +128,17 @@ class TencentLoginTests(unittest.TestCase):
         self.assertEqual(options["channel"], "chrome")
         self.assertNotIn("executable_path", options)
 
+    def test_qr_load_failure_emits_terminal_status_and_closes_browser(self):
+        fake = _FakePlaywright()
+        fake.chromium.browser.close = AsyncMock()
+        fake.chromium.browser.context.page.goto = AsyncMock(side_effect=RuntimeError('network unavailable'))
+        queue = Queue()
+        with patch.object(login, 'async_playwright', return_value=_PlaywrightContext(fake)), \
+             patch.object(login, 'set_init_script', new=AsyncMock(side_effect=lambda context: context)):
+            asyncio.run(login.get_tencent_cookie('demo', queue))
+        self.assertEqual(queue.get_nowait(), '500')
+        fake.chromium.browser.close.assert_awaited_once()
+
     def test_video_account_login_uses_configured_chrome_and_emits_qr(self):
         fake_playwright = _FakePlaywright()
         with TemporaryDirectory() as td:
@@ -145,6 +157,7 @@ class TencentLoginTests(unittest.TestCase):
         self.assertTrue(fake_playwright.chromium.launch_options["headless"])
         self.assertEqual(fake_playwright.chromium.browser.context_options['viewport'], {'width': 1440, 'height': 900})
         self.assertIn('--window-size=1440,960', fake_playwright.chromium.launch_options['args'])
+        self.assertIn('login', fake_playwright.chromium.browser.context.page.qr_frame_selector)
         pattern, options = fake_playwright.chromium.browser.context.page.waited_url
         self.assertEqual(pattern, '**/platform/**')
         self.assertEqual(options['timeout'], 200_000)

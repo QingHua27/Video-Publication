@@ -807,7 +807,7 @@
             :loading="sseConnecting" 
             :disabled="sseConnecting"
           >
-            {{ sseConnecting ? '请求中' : '确认' }}
+            {{ sseConnecting ? (qrCodeData ? '等待扫码' : '获取二维码…') : '确认' }}
           </el-button>
         </span>
       </template>
